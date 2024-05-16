@@ -522,7 +522,9 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
                 Impl,
                 MacCall,
                 MacroDef,
-                Delegation
+                Delegation,
+                GlobalRegistryDef,
+                GlobalRegistryAdd
             ]
         );
         ast_visit::walk_item(self, i)

@@ -58,6 +58,8 @@ pub enum Target {
     Param,
     PatField,
     ExprField,
+    GlobalRegistryDef,
+    GlobalRegistryAdd,
 }
 
 impl Display for Target {
@@ -99,7 +101,9 @@ impl Target {
             | Target::MacroDef
             | Target::Param
             | Target::PatField
-            | Target::ExprField => false,
+            | Target::ExprField
+            | Target::GlobalRegistryDef
+            | Target::GlobalRegistryAdd => false,
         }
     }
 
@@ -223,6 +227,8 @@ impl Target {
             Target::Param => "function param",
             Target::PatField => "pattern field",
             Target::ExprField => "struct field",
+            Target::GlobalRegistryDef => "global registry definition",
+            Target::GlobalRegistryAdd => "global registry addition",
         }
     }
 }

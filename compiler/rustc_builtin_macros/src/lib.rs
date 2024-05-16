@@ -41,6 +41,7 @@ mod errors;
 mod format;
 mod format_foreign;
 mod global_allocator;
+mod global_registration;
 mod log_syntax;
 mod pattern_type;
 mod source_util;
@@ -93,6 +94,7 @@ pub fn register_builtin_macros(resolver: &mut dyn ResolverExpand) {
         module_path: source_util::expand_mod,
         option_env: env::expand_option_env,
         pattern_type: pattern_type::expand,
+        register: global_registration::expand_register,
         std_panic: edition_panic::expand_panic,
         stringify: source_util::expand_stringify,
         trace_macros: trace_macros::expand_trace_macros,
@@ -108,6 +110,7 @@ pub fn register_builtin_macros(resolver: &mut dyn ResolverExpand) {
         derive: derive::Expander { is_const: false },
         derive_const: derive::Expander { is_const: true },
         global_allocator: global_allocator::expand,
+        global_registry: global_registration::expand_define_global_registry,
         test: test::expand_test,
         test_case: test::expand_test_case,
     }

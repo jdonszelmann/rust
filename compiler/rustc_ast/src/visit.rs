@@ -403,6 +403,12 @@ impl WalkItemKind for ItemKind {
                 visit_opt!(visitor, visit_ident, *rename);
                 visit_opt!(visitor, visit_block, body);
             }
+            ItemKind::GlobalRegistryDef(def) => {
+                try_visit!(visitor.visit_ty(&def.ty));
+            }
+            ItemKind::GlobalRegistryAdd(add) => {
+                try_visit!(visitor.visit_expr(&add.expr));
+            }
         }
         V::Result::output()
     }

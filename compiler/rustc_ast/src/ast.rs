@@ -2961,6 +2961,8 @@ impl Item {
             | ItemKind::GlobalAsm(_)
             | ItemKind::MacCall(_)
             | ItemKind::Delegation(_)
+            | ItemKind::GlobalRegistryDef(_)
+            | ItemKind::GlobalRegistryAdd(_)
             | ItemKind::MacroDef(_) => None,
             ItemKind::Static(_) => None,
             ItemKind::Const(i) => Some(&i.generics),
@@ -3172,6 +3174,16 @@ pub struct ConstItem {
     pub expr: Option<P<Expr>>,
 }
 
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub struct GlobalRegistryDef {
+    pub ty: P<Ty>,
+}
+
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub struct GlobalRegistryAdd {
+    pub expr: P<Expr>,
+}
+
 // Adding a new variant? Please update `test_item` in `tests/ui/macros/stringify.rs`.
 #[derive(Clone, Encodable, Decodable, Debug)]
 pub enum ItemKind {
@@ -3247,16 +3259,38 @@ pub enum ItemKind {
     ///
     /// E.g. `reuse <Type as Trait>::name { target_expr_template }`.
     Delegation(Box<Delegation>),
+
+    /// A definition of a global registry (TODO: more docs)
+    GlobalRegistryDef(Box<GlobalRegistryDef>),
+
+    /// An addition to a global registry (TODO: more docs)
+    GlobalRegistryAdd(Box<GlobalRegistryAdd>),
 }
 
 impl ItemKind {
     pub fn article(&self) -> &'static str {
         use ItemKind::*;
         match self {
-            Use(..) | Static(..) | Const(..) | Fn(..) | Mod(..) | GlobalAsm(..) | TyAlias(..)
-            | Struct(..) | Union(..) | Trait(..) | TraitAlias(..) | MacroDef(..)
-            | Delegation(..) => "a",
-            ExternCrate(..) | ForeignMod(..) | MacCall(..) | Enum(..) | Impl { .. } => "an",
+            Use(..)
+            | Static(..)
+            | Const(..)
+            | Fn(..)
+            | Mod(..)
+            | GlobalAsm(..)
+            | TyAlias(..)
+            | Struct(..)
+            | Union(..)
+            | Trait(..)
+            | TraitAlias(..)
+            | MacroDef(..)
+            | Delegation(..)
+            | GlobalRegistryDef(..) => "a",
+            ExternCrate(..)
+            | ForeignMod(..)
+            | MacCall(..)
+            | Enum(..)
+            | Impl { .. }
+            | GlobalRegistryAdd(..) => "an",
         }
     }
 
@@ -3280,6 +3314,8 @@ impl ItemKind {
             ItemKind::MacroDef(..) => "macro definition",
             ItemKind::Impl { .. } => "implementation",
             ItemKind::Delegation(..) => "delegated function",
+            ItemKind::GlobalRegistryDef(..) => "definition of a global registry",
+            ItemKind::GlobalRegistryAdd(..) => "addition to global registry",
         }
     }
 

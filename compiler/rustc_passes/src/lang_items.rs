@@ -286,6 +286,8 @@ impl<'ast, 'tcx> visit::Visitor<'ast> for LanguageItemCollector<'ast, 'tcx> {
             ast::ItemKind::Impl(_) => Target::Impl,
             ast::ItemKind::MacroDef(_) => Target::MacroDef,
             ast::ItemKind::MacCall(_) => unreachable!("macros should have been expanded"),
+            ast::ItemKind::GlobalRegistryDef(_) => Target::GlobalRegistryDef,
+            ast::ItemKind::GlobalRegistryAdd(_) => Target::GlobalRegistryAdd,
         };
 
         self.check_for_lang(

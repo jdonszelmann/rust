@@ -749,7 +749,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             | Target::Arm
             | Target::ForeignMod
             | Target::Closure
-            | Target::Impl => Some(target.name()),
+            | Target::Impl
+            | Target::GlobalRegistryAdd => Some(target.name()),
             Target::ExternCrate
             | Target::Use
             | Target::Static
@@ -773,7 +774,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             | Target::GenericParam(..)
             | Target::MacroDef
             | Target::PatField
-            | Target::ExprField => None,
+            | Target::ExprField
+            | Target::GlobalRegistryDef => None,
         } {
             tcx.dcx().emit_err(errors::DocAliasBadLocation { span, attr_str, location });
             return false;

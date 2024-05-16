@@ -1170,6 +1170,12 @@ impl NoopVisitItemKind for ItemKind {
                     vis.visit_block(body);
                 }
             }
+            ItemKind::GlobalRegistryDef(box def) => {
+                vis.visit_ty(&mut def.ty);
+            }
+            ItemKind::GlobalRegistryAdd(box add) => {
+                vis.visit_expr(&mut add.expr);
+            }
         }
     }
 }

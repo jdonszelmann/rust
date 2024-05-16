@@ -68,6 +68,31 @@ impl<'a> State<'a> {
         self.ann.post(self, AnnNode::SubItem(id))
     }
 
+    fn print_global_def(&mut self, ident: Ident, ty: &ast::Ty, vis: &ast::Visibility) {
+        self.head("");
+        self.word("#[global_registry]");
+        self.hardbreak();
+        self.print_visibility(vis);
+        self.word_space("static");
+        self.print_ident(ident);
+        self.word_space(":");
+        self.print_type(ty);
+        self.end(); // end the head-ibox
+        self.word(";");
+        self.end(); // end the outer cbox
+    }
+
+    fn print_global_add(&mut self, ident: Ident, val: &ast::Expr) {
+        self.head("");
+        self.word("register!(");
+        self.print_ident(ident);
+        self.word_space(",");
+        self.print_expr(val, FixupContext::default());
+        self.end(); // end the head-ibox
+        self.word(";");
+        self.end(); // end the outer cbox
+    }
+
     fn print_item_const(
         &mut self,
         ident: Ident,
@@ -376,6 +401,12 @@ impl<'a> State<'a> {
             }
             ast::ItemKind::Delegation(box delegation) => {
                 self.print_delegation(delegation, &item.vis, &item.attrs)
+            }
+            ast::ItemKind::GlobalRegistryDef(box def) => {
+                self.print_global_def(item.ident, &*def.ty, &item.vis);
+            }
+            ast::ItemKind::GlobalRegistryAdd(box add) => {
+                self.print_global_add(item.ident, &*add.expr);
             }
         }
         self.ann.post(self, AnnNode::Item(item))
