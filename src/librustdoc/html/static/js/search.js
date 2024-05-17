@@ -45,6 +45,7 @@ const itemTypes = [
     "attr",
     "derive",
     "traitalias", // 25
+    "globalregistrydef",
     "generic",
 ];
 

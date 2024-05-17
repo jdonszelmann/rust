@@ -728,7 +728,10 @@ impl<'a, 'b, 'tcx> BuildReducedGraphVisitor<'a, 'b, 'tcx> {
             }
 
             // These items live in the value namespace.
-            ItemKind::Const(..) | ItemKind::Delegation(..) | ItemKind::Static(..) => {
+            ItemKind::Const(..)
+            | ItemKind::Delegation(..)
+            | ItemKind::Static(..)
+            | ItemKind::GlobalRegistryDef(..) => {
                 self.r.define(parent, ident, ValueNS, (res, vis, sp, expansion));
             }
             ItemKind::Fn(..) => {
@@ -823,7 +826,10 @@ impl<'a, 'b, 'tcx> BuildReducedGraphVisitor<'a, 'b, 'tcx> {
             ItemKind::Impl(box Impl { of_trait: Some(..), .. }) => {
                 self.r.trait_impl_items.insert(local_def_id);
             }
-            ItemKind::Impl { .. } | ItemKind::ForeignMod(..) | ItemKind::GlobalAsm(..) => {}
+            ItemKind::Impl { .. }
+            | ItemKind::ForeignMod(..)
+            | ItemKind::GlobalAsm(..)
+            | ItemKind::GlobalRegistryAdd(..) => {}
 
             ItemKind::MacroDef(..) | ItemKind::MacCall(_) => unreachable!(),
         }
@@ -979,6 +985,7 @@ impl<'a, 'b, 'tcx> BuildReducedGraphVisitor<'a, 'b, 'tcx> {
                 DefKind::Fn
                 | DefKind::AssocFn
                 | DefKind::Static { .. }
+                | DefKind::GlobalRegistryDef { .. }
                 | DefKind::Const
                 | DefKind::AssocConst
                 | DefKind::Ctor(..),
@@ -998,6 +1005,7 @@ impl<'a, 'b, 'tcx> BuildReducedGraphVisitor<'a, 'b, 'tcx> {
                 | DefKind::Field
                 | DefKind::LifetimeParam
                 | DefKind::GlobalAsm
+                | DefKind::GlobalRegistryAdd
                 | DefKind::Closure
                 | DefKind::Impl { .. },
                 _,

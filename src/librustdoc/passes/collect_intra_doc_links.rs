@@ -1929,8 +1929,11 @@ fn resolution_failure(
                             | OpaqueTy
                             | TraitAlias
                             | TyParam
-                            | Static { .. } => "associated item",
-                            Impl { .. } | GlobalAsm => unreachable!("not a path"),
+                            | Static { .. }
+                            | GlobalRegistryDef => "associated item",
+                            Impl { .. } | GlobalAsm | GlobalRegistryAdd => {
+                                unreachable!("not a path")
+                            }
                         }
                     } else {
                         "associated item"

@@ -349,7 +349,9 @@ fn opaque_types_defined_by<'tcx>(
         | DefKind::Field
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::Impl { .. } => {}
+        | DefKind::Impl { .. }
+        | DefKind::GlobalRegistryAdd
+        | DefKind::GlobalRegistryDef => {}
         // Closures and coroutines are type checked with their parent, so we need to allow all
         // opaques from the closure signature *and* from the parent body.
         DefKind::Closure | DefKind::InlineConst => {

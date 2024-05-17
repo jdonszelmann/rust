@@ -870,8 +870,9 @@ fn should_encode_span(def_kind: DefKind) -> bool {
         | DefKind::OpaqueTy
         | DefKind::Field
         | DefKind::Impl { .. }
-        | DefKind::Closure => true,
-        DefKind::ForeignMod | DefKind::GlobalAsm => false,
+        | DefKind::Closure
+        | DefKind::GlobalRegistryDef => true,
+        DefKind::ForeignMod | DefKind::GlobalAsm | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -894,7 +895,8 @@ fn should_encode_attrs(def_kind: DefKind) -> bool {
         | DefKind::AssocConst
         | DefKind::Macro(_)
         | DefKind::Field
-        | DefKind::Impl { .. } => true,
+        | DefKind::Impl { .. }
+        | DefKind::GlobalRegistryDef => true,
         // Tools may want to be able to detect their tool lints on
         // closures from upstream crates, too. This is used by
         // https://github.com/model-checking/kani and is not a performance
@@ -911,7 +913,8 @@ fn should_encode_attrs(def_kind: DefKind) -> bool {
         | DefKind::OpaqueTy
         | DefKind::LifetimeParam
         | DefKind::Static { nested: true, .. }
-        | DefKind::GlobalAsm => false,
+        | DefKind::GlobalAsm
+        | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -923,7 +926,8 @@ fn should_encode_expn_that_defined(def_kind: DefKind) -> bool {
         | DefKind::Enum
         | DefKind::Variant
         | DefKind::Trait
-        | DefKind::Impl { .. } => true,
+        | DefKind::Impl { .. }
+        | DefKind::GlobalRegistryAdd => true,
         DefKind::TyAlias
         | DefKind::ForeignTy
         | DefKind::TraitAlias
@@ -946,7 +950,8 @@ fn should_encode_expn_that_defined(def_kind: DefKind) -> bool {
         | DefKind::Field
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::Closure => false,
+        | DefKind::Closure
+        | DefKind::GlobalRegistryDef => false,
     }
 }
 
@@ -969,7 +974,8 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::AssocFn
         | DefKind::AssocConst
         | DefKind::Macro(..)
-        | DefKind::Field => true,
+        | DefKind::Field
+        | DefKind::GlobalRegistryDef => true,
         DefKind::Use
         | DefKind::ForeignMod
         | DefKind::TyParam
@@ -982,7 +988,8 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::GlobalAsm
         | DefKind::Impl { .. }
         | DefKind::Closure
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -1010,14 +1017,16 @@ fn should_encode_stability(def_kind: DefKind) -> bool {
         | DefKind::Trait
         | DefKind::TraitAlias
         | DefKind::Macro(..)
-        | DefKind::ForeignTy => true,
+        | DefKind::ForeignTy
+        | DefKind::GlobalRegistryDef => true,
         DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::AnonConst
         | DefKind::InlineConst
         | DefKind::GlobalAsm
         | DefKind::Closure
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -1107,7 +1116,9 @@ fn should_encode_variances<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, def_kind: Def
         | DefKind::InlineConst
         | DefKind::GlobalAsm
         | DefKind::Closure
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryAdd
+        | DefKind::GlobalRegistryDef => false,
         DefKind::TyAlias => tcx.type_alias_is_lazy(def_id),
     }
 }
@@ -1143,7 +1154,9 @@ fn should_encode_generics(def_kind: DefKind) -> bool {
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryAdd
+        | DefKind::GlobalRegistryDef => false,
     }
 }
 
@@ -1166,7 +1179,8 @@ fn should_encode_type(tcx: TyCtxt<'_>, def_id: LocalDefId, def_kind: DefKind) ->
         | DefKind::Closure
         | DefKind::ConstParam
         | DefKind::AnonConst
-        | DefKind::InlineConst => true,
+        | DefKind::InlineConst
+        | DefKind::GlobalRegistryDef => true,
 
         DefKind::OpaqueTy => {
             let origin = tcx.opaque_type_origin(def_id);
@@ -1203,7 +1217,8 @@ fn should_encode_type(tcx: TyCtxt<'_>, def_id: LocalDefId, def_kind: DefKind) ->
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -1238,7 +1253,9 @@ fn should_encode_fn_sig(def_kind: DefKind) -> bool {
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryDef
+        | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -1275,7 +1292,9 @@ fn should_encode_constness(def_kind: DefKind) -> bool {
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryDef
+        | DefKind::GlobalRegistryAdd => false,
     }
 }
 
@@ -1308,7 +1327,9 @@ fn should_encode_const(def_kind: DefKind) -> bool {
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::GlobalRegistryAdd
+        | DefKind::GlobalRegistryDef => false,
     }
 }
 

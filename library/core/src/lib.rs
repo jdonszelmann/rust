@@ -406,6 +406,7 @@ pub mod result;
 pub mod sync;
 
 pub mod fmt;
+pub mod global_registration;
 pub mod hash;
 pub mod slice;
 pub mod str;

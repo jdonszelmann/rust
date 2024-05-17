@@ -528,7 +528,9 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
                     self.format_missing_with_indent(source!(self, item.span).lo());
                     self.format_foreign_mod(foreign_mod, item.span);
                 }
-                ast::ItemKind::Static(..) | ast::ItemKind::Const(..) => {
+                ast::ItemKind::Static(..)
+                | ast::ItemKind::Const(..)
+                | ast::ItemKind::GlobalRegistryDef(..) => {
                     self.visit_static(&StaticParts::from_item(item));
                 }
                 ast::ItemKind::Fn(ref fn_kind) => {
@@ -571,6 +573,10 @@ impl<'b, 'a: 'b> FmtVisitor<'a> {
                     self.visit_ty_alias_kind(ty_alias, &Item(item), item.span);
                 }
                 ast::ItemKind::GlobalAsm(..) => {
+                    let snippet = Some(self.snippet(item.span).to_owned());
+                    self.push_rewrite(item.span, snippet);
+                }
+                ast::ItemKind::GlobalRegistryAdd(..) => {
                     let snippet = Some(self.snippet(item.span).to_owned());
                     self.push_rewrite(item.span, snippet);
                 }

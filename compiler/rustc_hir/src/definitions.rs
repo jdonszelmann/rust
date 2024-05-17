@@ -289,6 +289,9 @@ pub enum DefPathData {
     OpaqueTy,
     /// An anonymous struct or union type i.e. `struct { foo: Type }` or `union { bar: Type }`
     AnonAdt,
+
+    /// An addition to a global registry
+    GlobalRegistryAdd,
 }
 
 impl Definitions {
@@ -418,7 +421,7 @@ impl DefPathData {
             TypeNs(name) | ValueNs(name) | MacroNs(name) | LifetimeNs(name) => Some(name),
 
             Impl | ForeignMod | CrateRoot | Use | GlobalAsm | Closure | Ctor | AnonConst
-            | OpaqueTy | AnonAdt => None,
+            | OpaqueTy | AnonAdt | GlobalRegistryAdd => None,
         }
     }
 
@@ -442,6 +445,7 @@ impl DefPathData {
             AnonConst => DefPathDataName::Anon { namespace: sym::constant },
             OpaqueTy => DefPathDataName::Anon { namespace: sym::opaque },
             AnonAdt => DefPathDataName::Anon { namespace: sym::anon_adt },
+            GlobalRegistryAdd => DefPathDataName::Anon { namespace: sym::anon },
         }
     }
 }

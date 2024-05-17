@@ -2261,6 +2261,7 @@ fn item_ty_to_section(ty: ItemType) -> ItemSection {
         ItemType::Function => ItemSection::Functions,
         ItemType::TypeAlias => ItemSection::TypeAliases,
         ItemType::Static => ItemSection::Statics,
+        ItemType::GlobalRegistryDef => ItemSection::Statics,
         ItemType::Constant => ItemSection::Constants,
         ItemType::Trait => ItemSection::Traits,
         ItemType::Impl => ItemSection::Implementations,

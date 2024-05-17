@@ -218,6 +218,7 @@ pub enum ItemKind {
     AssocType,
     Primitive,
     Keyword,
+    GlobalRegistryDef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

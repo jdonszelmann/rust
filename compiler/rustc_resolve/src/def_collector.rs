@@ -139,6 +139,8 @@ impl<'a, 'b, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'b, 'tcx> {
             ItemKind::GlobalAsm(..) => DefKind::GlobalAsm,
             ItemKind::Use(..) => return visit::walk_item(self, i),
             ItemKind::MacCall(..) => return self.visit_macro_invoc(i.id),
+            ItemKind::GlobalRegistryDef(..) => DefKind::GlobalRegistryDef,
+            ItemKind::GlobalRegistryAdd(..) => DefKind::GlobalRegistryAdd,
         };
         let def_id = self.create_def(i.id, i.ident.name, def_kind, i.span);
 

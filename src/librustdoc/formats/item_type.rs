@@ -56,8 +56,9 @@ pub(crate) enum ItemType {
     ProcAttribute = 23,
     ProcDerive = 24,
     TraitAlias = 25,
+    GlobalRegistryDef = 26,
     // This number is reserved for use in JavaScript
-    // Generic = 26,
+    // Generic = 27,
 }
 
 impl Serialize for ItemType {
@@ -129,6 +130,7 @@ impl ItemType {
             DefKind::Mod => Self::Module,
             DefKind::Const => Self::Constant,
             DefKind::Static { .. } => Self::Static,
+            DefKind::GlobalRegistryDef { .. } => Self::GlobalRegistryDef,
             DefKind::Struct => Self::Struct,
             DefKind::Union => Self::Union,
             DefKind::Trait => Self::Trait,
@@ -163,6 +165,7 @@ impl ItemType {
             | DefKind::OpaqueTy
             | DefKind::LifetimeParam
             | DefKind::GlobalAsm
+            | DefKind::GlobalRegistryAdd
             | DefKind::Impl { .. }
             | DefKind::Closure => Self::ForeignType,
         }
@@ -196,6 +199,7 @@ impl ItemType {
             ItemType::ProcAttribute => "attr",
             ItemType::ProcDerive => "derive",
             ItemType::TraitAlias => "traitalias",
+            ItemType::GlobalRegistryDef => "globalregistrydef",
         }
     }
     pub(crate) fn is_method(&self) -> bool {

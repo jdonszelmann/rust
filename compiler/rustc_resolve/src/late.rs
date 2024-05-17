@@ -2562,6 +2562,16 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
             ItemKind::ExternCrate(..) => {}
 
             ItemKind::MacCall(_) => panic!("unexpanded macro in resolve!"),
+            ItemKind::GlobalRegistryDef(box GlobalRegistryDef { ref ty }) => {
+                self.with_static_rib(def_kind, |this| {
+                    this.with_lifetime_rib(LifetimeRibKind::Elided(LifetimeRes::Static), |this| {
+                        this.visit_ty(ty);
+                    });
+                });
+            }
+            ItemKind::GlobalRegistryAdd(box GlobalRegistryAdd { ref expr }) => {
+                self.resolve_const_body(expr, Some((item.ident, ConstantItemKind::Static)));
+            }
         }
     }
 
@@ -4790,7 +4800,9 @@ impl<'ast> Visitor<'ast> for ItemInfoCollector<'_, '_, '_> {
             | ItemKind::ExternCrate(..)
             | ItemKind::MacroDef(..)
             | ItemKind::GlobalAsm(..)
-            | ItemKind::MacCall(..) => {}
+            | ItemKind::MacCall(..)
+            | ItemKind::GlobalRegistryDef(..)
+            | ItemKind::GlobalRegistryAdd(..) => {}
             ItemKind::Delegation(..) => {
                 // Delegated functions have lifetimes, their count is not necessarily zero.
                 // But skipping the delegation items here doesn't mean that the count will be considered zero,

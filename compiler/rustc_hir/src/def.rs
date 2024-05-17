@@ -131,6 +131,12 @@ pub enum DefKind {
     /// we treat them all the same, and code which needs to distinguish them can match
     /// or `hir::ClosureKind` or `type_of`.
     Closure,
+
+    /// An addition to a global registry (TODO: should this be a defkind?)
+    GlobalRegistryAdd,
+
+    /// A definition of a global registry
+    GlobalRegistryDef,
 }
 
 impl DefKind {
@@ -175,6 +181,8 @@ impl DefKind {
             DefKind::Closure => "closure",
             DefKind::ExternCrate => "extern crate",
             DefKind::GlobalAsm => "global assembly block",
+            DefKind::GlobalRegistryAdd => "global registry addition",
+            DefKind::GlobalRegistryDef => "global registry definition",
         }
     }
 
@@ -219,7 +227,8 @@ impl DefKind {
             | DefKind::Static { .. }
             | DefKind::Ctor(..)
             | DefKind::AssocFn
-            | DefKind::AssocConst => Some(Namespace::ValueNS),
+            | DefKind::AssocConst
+            | DefKind::GlobalRegistryDef => Some(Namespace::ValueNS),
 
             DefKind::Macro(..) => Some(Namespace::MacroNS),
 
@@ -234,7 +243,8 @@ impl DefKind {
             | DefKind::ForeignMod
             | DefKind::GlobalAsm
             | DefKind::Impl { .. }
-            | DefKind::OpaqueTy => None,
+            | DefKind::OpaqueTy
+            | DefKind::GlobalRegistryAdd => None,
         }
     }
 
@@ -262,7 +272,8 @@ impl DefKind {
             | DefKind::Static { .. }
             | DefKind::AssocFn
             | DefKind::AssocConst
-            | DefKind::Field => DefPathData::ValueNs(name),
+            | DefKind::Field
+            | DefKind::GlobalRegistryDef => DefPathData::ValueNs(name),
             DefKind::Macro(..) => DefPathData::MacroNs(name),
             DefKind::LifetimeParam => DefPathData::LifetimeNs(name),
             DefKind::Ctor(..) => DefPathData::Ctor,
@@ -274,6 +285,7 @@ impl DefKind {
             DefKind::GlobalAsm => DefPathData::GlobalAsm,
             DefKind::Impl { .. } => DefPathData::Impl,
             DefKind::Closure => DefPathData::Closure,
+            DefKind::GlobalRegistryAdd => DefPathData::GlobalRegistryAdd,
         }
     }
 
@@ -289,7 +301,8 @@ impl DefKind {
             | DefKind::AssocFn
             | DefKind::Ctor(..)
             | DefKind::Closure
-            | DefKind::Static { .. } => true,
+            | DefKind::Static { .. }
+            | DefKind::GlobalRegistryDef => true,
             DefKind::Mod
             | DefKind::Struct
             | DefKind::Union
@@ -314,7 +327,8 @@ impl DefKind {
             | DefKind::AnonConst
             | DefKind::InlineConst
             | DefKind::GlobalAsm
-            | DefKind::ExternCrate => false,
+            | DefKind::ExternCrate
+            | DefKind::GlobalRegistryAdd => false,
         }
     }
 }

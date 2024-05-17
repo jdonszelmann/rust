@@ -2062,7 +2062,9 @@ fn lint_redundant_lifetimes<'tcx>(
         | DefKind::Field
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::Closure => return,
+        | DefKind::Closure
+        | DefKind::GlobalRegistryAdd
+        | DefKind::GlobalRegistryDef => return,
     }
 
     // The ordering of this lifetime map is a bit subtle.
