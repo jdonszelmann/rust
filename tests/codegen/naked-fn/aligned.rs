@@ -13,7 +13,7 @@ use std::arch::asm;
 #[no_mangle]
 #[naked]
 pub unsafe extern "C" fn naked_empty() {
-    // CHECK-NEXT: {{.+}}:
+    // CHECK-NEXT: start:
     // CHECK-NEXT: call void asm
     // CHECK-NEXT: unreachable
     asm!("ret", options(noreturn));
