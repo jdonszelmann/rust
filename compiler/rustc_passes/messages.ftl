@@ -4,6 +4,11 @@
 -passes_see_issue =
     see issue #{$issue} <https://github.com/rust-lang/rust/issues/{$issue}> for more information
 
+-fn_align_hint =
+    `#[repr(align(...))]` is valid on functions
+-fn_align_hint_align_present =
+    `#[repr(align(...))]` alone is valid on functions
+
 passes_abi_invalid_attribute =
     `#[rustc_abi]` can only be applied to function items, type aliases, and associated functions
 passes_abi_ne =
@@ -24,22 +29,32 @@ passes_allow_internal_unstable =
 passes_attr_application_enum =
     attribute should be applied to an enum
     .label = not an enum
+    .align_note = {-fn_align_hint}
+    .align_note_present = {-fn_align_hint_align_present}
 
 passes_attr_application_struct =
     attribute should be applied to a struct
     .label = not a struct
+    .align_note = {-fn_align_hint}
+    .align_note_present = {-fn_align_hint_align_present}
 
 passes_attr_application_struct_enum_function_method_union =
     attribute should be applied to a struct, enum, function, associated function, or union
     .label = not a struct, enum, function, associated function, or union
+    .align_note = {-fn_align_hint}
+    .align_note_present = {-fn_align_hint_align_present}
 
 passes_attr_application_struct_enum_union =
     attribute should be applied to a struct, enum, or union
     .label = not a struct, enum, or union
+    .align_note = {-fn_align_hint}
+    .align_note_present = {-fn_align_hint_align_present}
 
 passes_attr_application_struct_union =
     attribute should be applied to a struct or union
     .label = not a struct or union
+    .align_note = {-fn_align_hint}
+    .align_note_present = {-fn_align_hint_align_present}
 
 passes_attr_crate_level =
     this attribute can only be applied at the crate level

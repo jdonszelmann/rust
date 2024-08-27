@@ -1419,6 +1419,17 @@ pub struct UnrecognizedReprHint {
     pub span: Span,
 }
 
+#[derive(Subdiagnostic, Clone, Copy)]
+pub enum FnAlignSuggestion {
+    #[note(passes_align_note)]
+    AlignPossible,
+    #[note(passes_align_note_present)]
+    AlignPresent {
+        #[primary_span]
+        span: Span,
+    },
+}
+
 #[derive(Diagnostic)]
 pub enum AttrApplication {
     #[diag(passes_attr_application_enum, code = E0517)]
@@ -1427,6 +1438,9 @@ pub enum AttrApplication {
         hint_span: Span,
         #[label]
         span: Span,
+
+        #[subdiagnostic]
+        fn_align_suggestion: Option<FnAlignSuggestion>,
     },
     #[diag(passes_attr_application_struct, code = E0517)]
     Struct {
@@ -1434,6 +1448,9 @@ pub enum AttrApplication {
         hint_span: Span,
         #[label]
         span: Span,
+
+        #[subdiagnostic]
+        fn_align_suggestion: Option<FnAlignSuggestion>,
     },
     #[diag(passes_attr_application_struct_union, code = E0517)]
     StructUnion {
@@ -1441,6 +1458,9 @@ pub enum AttrApplication {
         hint_span: Span,
         #[label]
         span: Span,
+
+        #[subdiagnostic]
+        fn_align_suggestion: Option<FnAlignSuggestion>,
     },
     #[diag(passes_attr_application_struct_enum_union, code = E0517)]
     StructEnumUnion {
@@ -1448,6 +1468,9 @@ pub enum AttrApplication {
         hint_span: Span,
         #[label]
         span: Span,
+
+        #[subdiagnostic]
+        fn_align_suggestion: Option<FnAlignSuggestion>,
     },
     #[diag(passes_attr_application_struct_enum_function_method_union, code = E0517)]
     StructEnumFunctionMethodUnion {
@@ -1455,6 +1478,9 @@ pub enum AttrApplication {
         hint_span: Span,
         #[label]
         span: Span,
+
+        #[subdiagnostic]
+        fn_align_suggestion: Option<FnAlignSuggestion>,
     },
 }
 

@@ -40,6 +40,7 @@ use rustc_trait_selection::infer::{TyCtxtInferExt, ValuePairs};
 use rustc_trait_selection::traits::ObligationCtxt;
 use tracing::debug;
 
+use crate::errors::FnAlignSuggestion;
 use crate::{errors, fluent_generated as fluent};
 
 #[derive(LintDiagnostic)]
@@ -1794,6 +1795,16 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         let mut is_simd = false;
         let mut is_transparent = false;
 
+        let has_align =
+            hints.iter().find_map(|i| (i.name_or_empty() == sym::align).then(|| i.span()));
+        let fn_align_suggestion = match (self.tcx.features().fn_align, has_align, target) {
+            // fn_align is on, there's an align attribute, and the target is an fn
+            (true, Some(span), Target::Fn) => Some(FnAlignSuggestion::AlignPresent { span }),
+            // fn_align is on, there's no align attribute, and the target is an fn
+            (true, None, Target::Fn) => Some(FnAlignSuggestion::AlignPossible),
+            _ => None,
+        };
+
         for hint in &hints {
             if !hint.is_meta_item() {
                 self.dcx().emit_err(errors::ReprIdent { span: hint.span() });
@@ -1812,6 +1823,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                             self.dcx().emit_err(errors::AttrApplication::StructEnumUnion {
                                 hint_span: hint.span(),
                                 span,
+                                fn_align_suggestion,
                             });
                         }
                     }
@@ -1840,6 +1852,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                                 errors::AttrApplication::StructEnumFunctionMethodUnion {
                                     hint_span: hint.span(),
                                     span,
+
+                                    fn_align_suggestion,
                                 },
                             );
                         }
@@ -1850,6 +1864,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         self.dcx().emit_err(errors::AttrApplication::StructUnion {
                             hint_span: hint.span(),
                             span,
+
+                            fn_align_suggestion,
                         });
                     } else {
                         continue;
@@ -1861,6 +1877,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         self.dcx().emit_err(errors::AttrApplication::Struct {
                             hint_span: hint.span(),
                             span,
+                            fn_align_suggestion,
                         });
                     } else {
                         continue;
@@ -1874,6 +1891,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                             self.dcx().emit_err(errors::AttrApplication::StructEnumUnion {
                                 hint_span: hint.span(),
                                 span,
+                                fn_align_suggestion,
                             });
                         }
                     }
@@ -1895,6 +1913,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         self.dcx().emit_err(errors::AttrApplication::Enum {
                             hint_span: hint.span(),
                             span,
+                            fn_align_suggestion,
                         });
                     } else {
                         continue;
