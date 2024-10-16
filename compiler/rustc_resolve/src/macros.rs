@@ -4,10 +4,10 @@
 use std::cell::Cell;
 use std::mem;
 
+use rustc_ast::attr::AttributeExt;
 use rustc_ast::expand::StrippedCfgItem;
 use rustc_ast::{self as ast, Crate, Inline, ItemKind, ModKind, NodeId, attr};
 use rustc_ast_pretty::pprust;
-use rustc_attr::{AttributeExt, StabilityLevel};
 use rustc_data_structures::intern::Interned;
 use rustc_data_structures::sync::Lrc;
 use rustc_errors::{Applicability, StashKey};
@@ -19,6 +19,7 @@ use rustc_expand::compile_declarative_macro;
 use rustc_expand::expand::{
     AstFragment, AstFragmentKind, Invocation, InvocationKind, SupportsMacroExpansion,
 };
+use rustc_hir::StabilityLevel;
 use rustc_hir::def::{self, DefKind, Namespace, NonMacroAttrKind};
 use rustc_hir::def_id::{CrateNum, DefId, LocalDefId};
 use rustc_middle::middle::stability;

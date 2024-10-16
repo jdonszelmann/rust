@@ -1,9 +1,9 @@
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher, ToStableHashKey};
 use rustc_span::def_id::DefPathHash;
 
+use crate::Attribute;
 use crate::hir::{
-    Attribute, AttributeMap, BodyId, Crate, ForeignItemId, ImplItemId, ItemId, OwnerNodes,
-    TraitItemId,
+    AttributeMap, BodyId, Crate, ForeignItemId, ImplItemId, ItemId, OwnerNodes, TraitItemId,
 };
 use crate::hir_id::{HirId, ItemLocalId};
 

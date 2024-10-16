@@ -4,19 +4,19 @@
 use std::mem::replace;
 use std::num::NonZero;
 
-use rustc_attr::{
-    self as attr, ConstStability, DeprecatedSince, Stability, StabilityLevel, StableSince,
-    Unstable, UnstableReason, VERSION_PLACEHOLDER,
-};
+use rustc_attr as attr;
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_data_structures::unord::{ExtendUnord, UnordMap, UnordSet};
 use rustc_feature::{ACCEPTED_LANG_FEATURES, EnabledLangFeature, EnabledLibFeature};
-use rustc_hir as hir;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_ID, LOCAL_CRATE, LocalDefId, LocalModDefId};
 use rustc_hir::hir_id::CRATE_HIR_ID;
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{FieldDef, Item, ItemKind, TraitRef, Ty, TyKind, Variant};
+use rustc_hir::{
+    self as hir, ConstStability, DeprecatedSince, FieldDef, Item, ItemKind, Stability,
+    StabilityLevel, StableSince, TraitRef, Ty, TyKind, UnstableReason, VERSION_PLACEHOLDER,
+    Variant,
+};
 use rustc_middle::hir::nested_filter;
 use rustc_middle::middle::lib_features::{FeatureStability, LibFeatures};
 use rustc_middle::middle::privacy::EffectiveVisibilities;
@@ -199,7 +199,7 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
             // this is *almost surely* an accident.
             if let (
                 &Some(DeprecatedSince::RustcVersion(dep_since)),
-                &attr::Stable { since: stab_since, .. },
+                &StabilityLevel::Stable { since: stab_since, .. },
             ) = (&depr.as_ref().map(|(d, _)| d.since), &stab.level)
             {
                 match stab_since {
@@ -208,7 +208,7 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
                             .dcx()
                             .emit_err(errors::CannotStabilizeDeprecated { span, item_sp });
                     }
-                    StableSince::Version(stab_since) => {
+                    StableSince::Version(stab_since, _) => {
                         if dep_since < stab_since {
                             self.tcx
                                 .dcx()
@@ -224,15 +224,17 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
 
             // Stable *language* features shouldn't be used as unstable library features.
             // (Not doing this for stable library features is checked by tidy.)
-            if let Stability { level: Unstable { .. }, feature } = stab {
+            if let Stability { level: StabilityLevel::Unstable { .. }, feature } = stab {
                 if ACCEPTED_LANG_FEATURES.iter().find(|f| f.name == feature).is_some() {
                     self.tcx
                         .dcx()
                         .emit_err(errors::UnstableAttrForAlreadyStableFeature { span, item_sp });
                 }
             }
-            if let Stability { level: Unstable { implied_by: Some(implied_by), .. }, feature } =
-                stab
+            if let Stability {
+                level: StabilityLevel::Unstable { implied_by: Some(implied_by), .. },
+                feature,
+            } = stab
             {
                 self.index.implications.insert(implied_by, feature);
             }
@@ -278,8 +280,10 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
 
         // Stable *language* features shouldn't be used as unstable library features.
         // (Not doing this for stable library features is checked by tidy.)
-        if let Some((ConstStability { level: Unstable { .. }, feature, .. }, const_span)) =
-            const_stab
+        if let Some((
+            ConstStability { level: StabilityLevel::Unstable { .. }, feature, .. },
+            const_span,
+        )) = const_stab
         {
             if ACCEPTED_LANG_FEATURES.iter().find(|f| f.name == feature).is_some() {
                 self.tcx.dcx().emit_err(errors::UnstableAttrForAlreadyStableFeature {
@@ -314,7 +318,7 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
         });
 
         if let Some(ConstStability {
-            level: Unstable { implied_by: Some(implied_by), .. },
+            level: StabilityLevel::Unstable { implied_by: Some(implied_by), .. },
             feature,
             ..
         }) = const_stab
@@ -692,7 +696,7 @@ fn stability_index(tcx: TyCtxt<'_>, (): ()) -> Index {
         // by default and are unable to be used.
         if tcx.sess.opts.unstable_opts.force_unstable_if_unmarked {
             let stability = Stability {
-                level: attr::StabilityLevel::Unstable {
+                level: StabilityLevel::Unstable {
                     reason: UnstableReason::Default,
                     issue: NonZero::new(27812),
                     is_soft: false,
@@ -780,7 +784,9 @@ impl<'tcx> Visitor<'tcx> for Checker<'tcx> {
                     // error if all involved types and traits are stable, because
                     // it will have no effect.
                     // See: https://github.com/rust-lang/rust/issues/55436
-                    if let Some((Stability { level: attr::Unstable { .. }, .. }, span)) = stab {
+                    if let Some((Stability { level: StabilityLevel::Unstable { .. }, .. }, span)) =
+                        stab
+                    {
                         let mut c = CheckTraitImplStable { tcx: self.tcx, fully_stable: true };
                         c.visit_ty(self_ty);
                         c.visit_trait_ref(t);

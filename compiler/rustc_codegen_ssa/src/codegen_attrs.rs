@@ -1,12 +1,12 @@
+use rustc_ast::attr::list_contains_name;
 use rustc_ast::{MetaItemInner, attr};
-use rustc_attr::{InlineAttr, InstructionSetAttr, OptimizeAttr, list_contains_name};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::codes::*;
 use rustc_errors::{DiagMessage, SubdiagMessage, struct_span_code_err};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{DefId, LOCAL_CRATE, LocalDefId};
 use rustc_hir::weak_lang_items::WEAK_LANG_ITEMS;
-use rustc_hir::{self as hir, LangItem, lang_items};
+use rustc_hir::{self as hir, InlineAttr, InstructionSetAttr, LangItem, OptimizeAttr, lang_items};
 use rustc_middle::middle::codegen_fn_attrs::{
     CodegenFnAttrFlags, CodegenFnAttrs, PatchableFunctionEntry,
 };

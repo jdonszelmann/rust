@@ -187,6 +187,7 @@ use rustc_ast::{
 };
 use rustc_attr as attr;
 use rustc_expand::base::{Annotatable, ExtCtxt};
+use rustc_hir::Repr;
 use rustc_span::symbol::{Ident, Symbol, kw, sym};
 use rustc_span::{DUMMY_SP, Span};
 use thin_vec::{ThinVec, thin_vec};
@@ -483,7 +484,7 @@ impl<'a> TraitDef<'a> {
             Annotatable::Item(item) => {
                 let is_packed = item.attrs.iter().any(|attr| {
                     for r in attr::find_repr_attrs(cx.sess, attr) {
-                        if let attr::ReprPacked(_) = r {
+                        if let Repr::Packed(_) = r {
                             return true;
                         }
                     }

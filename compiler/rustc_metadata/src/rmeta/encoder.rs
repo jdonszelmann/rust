@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
-use rustc_ast::attr::AttributeExt;
+use rustc_ast::attr::{self as attr, AttributeExt};
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_data_structures::memmap::{Mmap, MmapMut};
 use rustc_data_structures::sync::{Lrc, join, par_for_each_in};

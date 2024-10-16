@@ -2,7 +2,7 @@ use clippy_config::Conf;
 use clippy_utils::diagnostics::span_lint_and_then;
 use clippy_utils::is_from_proc_macro;
 use clippy_utils::msrvs::Msrv;
-use rustc_attr::{StabilityLevel, StableSince};
+use rustc_hir::{StabilityLevel, StableSince};
 use rustc_errors::Applicability;
 use rustc_hir::def::Res;
 use rustc_hir::def_id::DefId;
@@ -184,7 +184,7 @@ fn is_stable(cx: &LateContext<'_>, mut def_id: DefId, msrv: &Msrv) -> bool {
             } = stability.level
         {
             let stable = match since {
-                StableSince::Version(v) => msrv.meets(v),
+                StableSince::Version(v, _) => msrv.meets(v),
                 StableSince::Current => msrv.current().is_none(),
                 StableSince::Err => false,
             };

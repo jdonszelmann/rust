@@ -9,6 +9,7 @@ use rustc_ast::{
 use rustc_attr as attr;
 use rustc_data_structures::flat_map_in_place::FlatMapInPlace;
 use rustc_expand::base::{Annotatable, ExtCtxt};
+use rustc_hir::Repr;
 use rustc_macros::Diagnostic;
 use rustc_span::symbol::{Ident, sym};
 use rustc_span::{Span, Symbol};
@@ -34,9 +35,7 @@ pub(crate) fn expand_deriving_coerce_pointee(
         && let ItemKind::Struct(struct_data, g) = &aitem.kind
     {
         let is_transparent = aitem.attrs.iter().any(|attr| {
-            attr::find_repr_attrs(cx.sess, attr)
-                .into_iter()
-                .any(|r| matches!(r, attr::ReprTransparent))
+            attr::find_repr_attrs(cx.sess, attr).into_iter().any(|r| matches!(r, Repr::Transparent))
         });
         if !is_transparent {
             cx.dcx().emit_err(RequireTransparent { span });

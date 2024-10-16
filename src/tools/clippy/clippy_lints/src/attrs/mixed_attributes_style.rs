@@ -18,13 +18,7 @@ impl From<&AttrKind> for SimpleAttrKind {
     fn from(value: &AttrKind) -> Self {
         match value {
             AttrKind::Normal(attr) => {
-                let path_symbols = attr
-                    .item
-                    .path
-                    .segments
-                    .iter()
-                    .map(|seg| seg.ident.name)
-                    .collect::<Vec<_>>();
+                let path_symbols = attr.item.path.segments.iter().map(|seg| seg.ident.name).collect::<Vec<_>>();
                 Self::Normal(path_symbols)
             },
             AttrKind::DocComment(..) => Self::Doc,

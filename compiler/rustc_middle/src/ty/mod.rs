@@ -1506,9 +1506,9 @@ impl<'tcx> TyCtxt<'tcx> {
         for attr in self.get_attrs(did, sym::repr) {
             for r in attr::parse_repr_attr(self.sess, attr) {
                 flags.insert(match r {
-                    attr::ReprRust => ReprFlags::empty(),
-                    attr::ReprC => ReprFlags::IS_C,
-                    attr::ReprPacked(pack) => {
+                    hir::Repr::Rust => ReprFlags::empty(),
+                    hir::Repr::C => ReprFlags::IS_C,
+                    hir::Repr::Packed(pack) => {
                         min_pack = Some(if let Some(min_pack) = min_pack {
                             min_pack.min(pack)
                         } else {
@@ -1516,11 +1516,11 @@ impl<'tcx> TyCtxt<'tcx> {
                         });
                         ReprFlags::empty()
                     }
-                    attr::ReprTransparent => ReprFlags::IS_TRANSPARENT,
-                    attr::ReprSimd => ReprFlags::IS_SIMD,
-                    attr::ReprInt(i) => {
+                    hir::Repr::Transparent => ReprFlags::IS_TRANSPARENT,
+                    hir::Repr::Simd => ReprFlags::IS_SIMD,
+                    hir::Repr::Int(i) => {
                         size = Some(match i {
-                            attr::IntType::SignedInt(x) => match x {
+                            hir::IntType::SignedInt(x) => match x {
                                 ast::IntTy::Isize => IntegerType::Pointer(true),
                                 ast::IntTy::I8 => IntegerType::Fixed(Integer::I8, true),
                                 ast::IntTy::I16 => IntegerType::Fixed(Integer::I16, true),
@@ -1528,7 +1528,7 @@ impl<'tcx> TyCtxt<'tcx> {
                                 ast::IntTy::I64 => IntegerType::Fixed(Integer::I64, true),
                                 ast::IntTy::I128 => IntegerType::Fixed(Integer::I128, true),
                             },
-                            attr::IntType::UnsignedInt(x) => match x {
+                            hir::IntType::UnsignedInt(x) => match x {
                                 ast::UintTy::Usize => IntegerType::Pointer(false),
                                 ast::UintTy::U8 => IntegerType::Fixed(Integer::I8, false),
                                 ast::UintTy::U16 => IntegerType::Fixed(Integer::I16, false),
@@ -1539,7 +1539,7 @@ impl<'tcx> TyCtxt<'tcx> {
                         });
                         ReprFlags::empty()
                     }
-                    attr::ReprAlign(align) => {
+                    hir::Repr::Align(align) => {
                         max_align = max_align.max(Some(align));
                         ReprFlags::empty()
                     }

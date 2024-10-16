@@ -34,6 +34,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::mem;
 
+use rustc_ast::attr;
 use rustc_ast::token::{Token, TokenKind};
 use rustc_ast::tokenstream::{TokenStream, TokenTree};
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
@@ -55,7 +56,7 @@ use rustc_trait_selection::traits::wf::object_region_bounds;
 use thin_vec::ThinVec;
 use tracing::{debug, instrument};
 use utils::*;
-use {rustc_ast as ast, rustc_attr as attr, rustc_hir as hir};
+use {rustc_ast as ast, rustc_hir as hir};
 
 pub(crate) use self::types::*;
 pub(crate) use self::utils::{krate, register_res, synthesize_auto_trait_and_blanket_impls};

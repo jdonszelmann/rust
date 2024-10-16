@@ -6,7 +6,7 @@ use rustc_data_structures::unord::{UnordMap, UnordSet};
 use rustc_errors::MultiSpan;
 use rustc_errors::codes::*;
 use rustc_hir::def::{CtorKind, DefKind};
-use rustc_hir::{Node, Safety, intravisit};
+use rustc_hir::{Node, Repr, Safety, intravisit};
 use rustc_infer::infer::{RegionVariableOrigin, TyCtxtInferExt};
 use rustc_infer::traits::{Obligation, ObligationCauseCode};
 use rustc_lint_defs::builtin::{
@@ -1250,7 +1250,7 @@ pub(super) fn check_packed(tcx: TyCtxt<'_>, sp: Span, def: ty::AdtDef<'_>) {
     if repr.packed() {
         for attr in tcx.get_attrs(def.did(), sym::repr) {
             for r in attr::parse_repr_attr(tcx.sess, attr) {
-                if let attr::ReprPacked(pack) = r
+                if let Repr::Packed(pack) = r
                     && let Some(repr_pack) = repr.pack
                     && pack != repr_pack
                 {

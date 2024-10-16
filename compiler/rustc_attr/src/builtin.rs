@@ -3,23 +3,26 @@
 use std::num::NonZero;
 
 use rustc_abi::Align;
-use rustc_ast::attr::AttributeExt;
+use rustc_ast::attr::{AttributeExt, filter_by_name, first_attr_value_str_by_name};
 use rustc_ast::{self as ast, LitKind, MetaItem, MetaItemInner, MetaItemKind, MetaItemLit, NodeId};
 use rustc_ast_pretty::pprust;
 use rustc_errors::ErrorGuaranteed;
 use rustc_feature::{Features, GatedCfg, find_gated_cfg, is_builtin_attr_name};
-use rustc_macros::{Decodable, Encodable, HashStable_Generic};
+use rustc_hir::{
+    ConstStability, DefaultBodyStability, DeprecatedSince, Deprecation, IntType, Repr,
+    RustcVersion, Stability, StabilityLevel, StableSince, UnstableReason,
+};
+use rustc_session::Session;
 use rustc_session::config::ExpectedValues;
 use rustc_session::lint::BuiltinLintDiag;
 use rustc_session::lint::builtin::UNEXPECTED_CFGS;
 use rustc_session::parse::feature_err;
-use rustc_session::{RustcVersion, Session};
 use rustc_span::Span;
 use rustc_span::hygiene::Transparency;
 use rustc_span::symbol::{Symbol, kw, sym};
 
+use crate::fluent_generated;
 use crate::session_diagnostics::{self, IncorrectReprFormatGenericCause};
-use crate::{filter_by_name, first_attr_value_str_by_name, fluent_generated};
 
 /// The version placeholder that recently stabilized features contain inside the
 /// `since` field of the `#[stable]` attribute.
@@ -37,176 +40,6 @@ pub(crate) enum UnsupportedLiteralReason {
     CfgBoolean,
     DeprecatedString,
     DeprecatedKvPair,
-}
-
-#[derive(Copy, Clone, PartialEq, Encodable, Decodable, Debug, HashStable_Generic)]
-pub enum InlineAttr {
-    None,
-    Hint,
-    Always,
-    Never,
-}
-
-#[derive(Clone, Encodable, Decodable, Debug, PartialEq, Eq, HashStable_Generic)]
-pub enum InstructionSetAttr {
-    ArmA32,
-    ArmT32,
-}
-
-#[derive(Clone, Encodable, Decodable, Debug, HashStable_Generic)]
-pub enum OptimizeAttr {
-    None,
-    Speed,
-    Size,
-}
-
-/// Represents the following attributes:
-///
-/// - `#[stable]`
-/// - `#[unstable]`
-#[derive(Encodable, Decodable, Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(HashStable_Generic)]
-pub struct Stability {
-    pub level: StabilityLevel,
-    pub feature: Symbol,
-}
-
-impl Stability {
-    pub fn is_unstable(&self) -> bool {
-        self.level.is_unstable()
-    }
-
-    pub fn is_stable(&self) -> bool {
-        self.level.is_stable()
-    }
-
-    pub fn stable_since(&self) -> Option<StableSince> {
-        self.level.stable_since()
-    }
-}
-
-/// Represents the `#[rustc_const_unstable]` and `#[rustc_const_stable]` attributes.
-#[derive(Encodable, Decodable, Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(HashStable_Generic)]
-pub struct ConstStability {
-    pub level: StabilityLevel,
-    pub feature: Symbol,
-    /// This is true iff the `const_stable_indirect` attribute is present.
-    pub const_stable_indirect: bool,
-    /// whether the function has a `#[rustc_promotable]` attribute
-    pub promotable: bool,
-}
-
-impl ConstStability {
-    pub fn is_const_unstable(&self) -> bool {
-        self.level.is_unstable()
-    }
-
-    pub fn is_const_stable(&self) -> bool {
-        self.level.is_stable()
-    }
-}
-
-/// Represents the `#[rustc_default_body_unstable]` attribute.
-#[derive(Encodable, Decodable, Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(HashStable_Generic)]
-pub struct DefaultBodyStability {
-    pub level: StabilityLevel,
-    pub feature: Symbol,
-}
-
-/// The available stability levels.
-#[derive(Encodable, Decodable, PartialEq, Copy, Clone, Debug, Eq, Hash)]
-#[derive(HashStable_Generic)]
-pub enum StabilityLevel {
-    /// `#[unstable]`
-    Unstable {
-        /// Reason for the current stability level.
-        reason: UnstableReason,
-        /// Relevant `rust-lang/rust` issue.
-        issue: Option<NonZero<u32>>,
-        is_soft: bool,
-        /// If part of a feature is stabilized and a new feature is added for the remaining parts,
-        /// then the `implied_by` attribute is used to indicate which now-stable feature previously
-        /// contained an item.
-        ///
-        /// ```pseudo-Rust
-        /// #[unstable(feature = "foo", issue = "...")]
-        /// fn foo() {}
-        /// #[unstable(feature = "foo", issue = "...")]
-        /// fn foobar() {}
-        /// ```
-        ///
-        /// ...becomes...
-        ///
-        /// ```pseudo-Rust
-        /// #[stable(feature = "foo", since = "1.XX.X")]
-        /// fn foo() {}
-        /// #[unstable(feature = "foobar", issue = "...", implied_by = "foo")]
-        /// fn foobar() {}
-        /// ```
-        implied_by: Option<Symbol>,
-    },
-    /// `#[stable]`
-    Stable {
-        /// Rust release which stabilized this feature.
-        since: StableSince,
-        /// Is this item allowed to be referred to on stable, despite being contained in unstable
-        /// modules?
-        allowed_through_unstable_modules: bool,
-    },
-}
-
-/// Rust release in which a feature is stabilized.
-#[derive(Encodable, Decodable, PartialEq, Copy, Clone, Debug, Eq, PartialOrd, Ord, Hash)]
-#[derive(HashStable_Generic)]
-pub enum StableSince {
-    Version(RustcVersion),
-    /// Stabilized in the upcoming version, whatever number that is.
-    Current,
-    /// Failed to parse a stabilization version.
-    Err,
-}
-
-impl StabilityLevel {
-    pub fn is_unstable(&self) -> bool {
-        matches!(self, StabilityLevel::Unstable { .. })
-    }
-    pub fn is_stable(&self) -> bool {
-        matches!(self, StabilityLevel::Stable { .. })
-    }
-    pub fn stable_since(&self) -> Option<StableSince> {
-        match *self {
-            StabilityLevel::Stable { since, .. } => Some(since),
-            StabilityLevel::Unstable { .. } => None,
-        }
-    }
-}
-
-#[derive(Encodable, Decodable, PartialEq, Copy, Clone, Debug, Eq, Hash)]
-#[derive(HashStable_Generic)]
-pub enum UnstableReason {
-    None,
-    Default,
-    Some(Symbol),
-}
-
-impl UnstableReason {
-    fn from_opt_reason(reason: Option<Symbol>) -> Self {
-        // UnstableReason::Default constructed manually
-        match reason {
-            Some(r) => Self::Some(r),
-            None => Self::None,
-        }
-    }
-
-    pub fn to_opt_reason(&self) -> Option<Symbol> {
-        match self {
-            Self::None => None,
-            Self::Default => Some(sym::unstable_location_reason_default),
-            Self::Some(r) => Some(*r),
-        }
-    }
 }
 
 /// Collects stability info from `stable`/`unstable`/`rustc_allowed_through_unstable_modules`
@@ -464,7 +297,7 @@ fn parse_stability(sess: &Session, attr: &impl AttributeExt) -> Option<(Symbol, 
         if since.as_str() == VERSION_PLACEHOLDER {
             StableSince::Current
         } else if let Some(version) = parse_version(since) {
-            StableSince::Version(version)
+            StableSince::Version(version, since)
         } else {
             sess.dcx().emit_err(session_diagnostics::InvalidSince { span: attr.span() });
             StableSince::Err
@@ -834,53 +667,6 @@ pub fn eval_condition(
     }
 }
 
-#[derive(Copy, Debug, Encodable, Decodable, Clone, HashStable_Generic)]
-pub struct Deprecation {
-    pub since: DeprecatedSince,
-    /// The note to issue a reason.
-    pub note: Option<Symbol>,
-    /// A text snippet used to completely replace any use of the deprecated item in an expression.
-    ///
-    /// This is currently unstable.
-    pub suggestion: Option<Symbol>,
-}
-
-/// Release in which an API is deprecated.
-#[derive(Copy, Debug, Encodable, Decodable, Clone, HashStable_Generic)]
-pub enum DeprecatedSince {
-    RustcVersion(RustcVersion),
-    /// Deprecated in the future ("to be determined").
-    Future,
-    /// `feature(staged_api)` is off. Deprecation versions outside the standard
-    /// library are allowed to be arbitrary strings, for better or worse.
-    NonStandard(Symbol),
-    /// Deprecation version is unspecified but optional.
-    Unspecified,
-    /// Failed to parse a deprecation version, or the deprecation version is
-    /// unspecified and required. An error has already been emitted.
-    Err,
-}
-
-impl Deprecation {
-    /// Whether an item marked with #[deprecated(since = "X")] is currently
-    /// deprecated (i.e., whether X is not greater than the current rustc
-    /// version).
-    pub fn is_in_effect(&self) -> bool {
-        match self.since {
-            DeprecatedSince::RustcVersion(since) => since <= RustcVersion::CURRENT,
-            DeprecatedSince::Future => false,
-            // The `since` field doesn't have semantic purpose without `#![staged_api]`.
-            DeprecatedSince::NonStandard(_) => true,
-            // Assume deprecation is in effect if "since" field is absent or invalid.
-            DeprecatedSince::Unspecified | DeprecatedSince::Err => true,
-        }
-    }
-
-    pub fn is_since_rustc_version(&self) -> bool {
-        matches!(self.since, DeprecatedSince::RustcVersion(_))
-    }
-}
-
 /// Finds the deprecation attribute. `None` if none exists.
 pub fn find_deprecation(
     sess: &Session,
@@ -1017,36 +803,6 @@ pub fn find_deprecation(
     depr
 }
 
-#[derive(PartialEq, Debug, Encodable, Decodable, Copy, Clone)]
-pub enum ReprAttr {
-    ReprInt(IntType),
-    ReprRust,
-    ReprC,
-    ReprPacked(Align),
-    ReprSimd,
-    ReprTransparent,
-    ReprAlign(Align),
-}
-
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
-#[derive(Encodable, Decodable, HashStable_Generic)]
-pub enum IntType {
-    SignedInt(ast::IntTy),
-    UnsignedInt(ast::UintTy),
-}
-
-impl IntType {
-    #[inline]
-    pub fn is_signed(self) -> bool {
-        use IntType::*;
-
-        match self {
-            SignedInt(..) => true,
-            UnsignedInt(..) => false,
-        }
-    }
-}
-
 /// Parse #[repr(...)] forms.
 ///
 /// Valid repr contents: any of the primitive integral type names (see
@@ -1054,13 +810,12 @@ impl IntType {
 /// the same discriminant size that the corresponding C enum would or C
 /// structure layout, `packed` to remove padding, and `transparent` to delegate representation
 /// concerns to the only non-ZST field.
-pub fn find_repr_attrs(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr> {
+pub fn find_repr_attrs(sess: &Session, attr: &impl AttributeExt) -> Vec<Repr> {
     if attr.has_name(sym::repr) { parse_repr_attr(sess, attr) } else { Vec::new() }
 }
 
-pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr> {
+pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<Repr> {
     assert!(attr.has_name(sym::repr), "expected `#[repr(..)]`, found: {attr:?}");
-    use ReprAttr::*;
     let mut acc = Vec::new();
     let dcx = sess.dcx();
 
@@ -1069,11 +824,11 @@ pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr
             let mut recognised = false;
             if item.is_word() {
                 let hint = match item.name_or_empty() {
-                    sym::Rust => Some(ReprRust),
-                    sym::C => Some(ReprC),
-                    sym::packed => Some(ReprPacked(Align::ONE)),
-                    sym::simd => Some(ReprSimd),
-                    sym::transparent => Some(ReprTransparent),
+                    sym::Rust => Some(Repr::Rust),
+                    sym::C => Some(Repr::C),
+                    sym::packed => Some(Repr::Packed(Align::ONE)),
+                    sym::simd => Some(Repr::Simd),
+                    sym::transparent => Some(Repr::Transparent),
                     sym::align => {
                         sess.dcx().emit_err(session_diagnostics::InvalidReprAlignNeedArg {
                             span: item.span(),
@@ -1081,7 +836,7 @@ pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr
                         recognised = true;
                         None
                     }
-                    name => int_type_of_word(name).map(ReprInt),
+                    name => int_type_of_word(name).map(Repr::Int),
                 };
 
                 if let Some(h) = hint {
@@ -1094,7 +849,7 @@ pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr
                 if name == sym::align {
                     recognised = true;
                     match parse_alignment(&value.kind) {
-                        Ok(literal) => acc.push(ReprAlign(literal)),
+                        Ok(literal) => acc.push(Repr::Align(literal)),
                         Err(message) => {
                             err_span = value.span;
                             literal_error = Some(message)
@@ -1103,7 +858,7 @@ pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr
                 } else if name == sym::packed {
                     recognised = true;
                     match parse_alignment(&value.kind) {
-                        Ok(literal) => acc.push(ReprPacked(literal)),
+                        Ok(literal) => acc.push(Repr::Packed(literal)),
                         Err(message) => {
                             err_span = value.span;
                             literal_error = Some(message)
@@ -1213,7 +968,7 @@ pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr
 }
 
 fn int_type_of_word(s: Symbol) -> Option<IntType> {
-    use IntType::*;
+    use rustc_hir::IntType::*;
 
     match s {
         sym::i8 => Some(SignedInt(ast::IntTy::I8)),
