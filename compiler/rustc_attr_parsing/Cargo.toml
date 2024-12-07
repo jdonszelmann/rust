@@ -1,5 +1,5 @@
 [package]
-name = "rustc_attr"
+name = "rustc_attr_parsing"
 version = "0.0.0"
 edition = "2021"
 
@@ -8,6 +8,7 @@ edition = "2021"
 rustc_abi = { path = "../rustc_abi" }
 rustc_ast = { path = "../rustc_ast" }
 rustc_ast_pretty = { path = "../rustc_ast_pretty" }
+rustc_attr_data_structures = { path = "../rustc_attr_data_structures" }
 rustc_data_structures = { path = "../rustc_data_structures" }
 rustc_errors = { path = "../rustc_errors" }
 rustc_feature = { path = "../rustc_feature" }

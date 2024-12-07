@@ -185,7 +185,7 @@ use rustc_ast::{
     self as ast, BindingMode, ByRef, EnumDef, Expr, GenericArg, GenericParamKind, Generics,
     Mutability, PatKind, VariantData,
 };
-use rustc_attr as attr;
+use rustc_attr_parsing as attr;
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_hir::Repr;
 use rustc_span::symbol::{Ident, Symbol, kw, sym};

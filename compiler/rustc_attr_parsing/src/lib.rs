@@ -31,6 +31,7 @@
 mod builtin;
 mod session_diagnostics;
 
+pub use rustc_attr_data_structures::*;
 pub use builtin::*;
 
 rustc_fluent_macro::fluent_messages! { "../messages.ftl" }

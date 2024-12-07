@@ -8,9 +8,9 @@ use rustc_ast::{self as ast, LitKind, MetaItem, MetaItemInner, MetaItemKind, Met
 use rustc_ast_pretty::pprust;
 use rustc_errors::ErrorGuaranteed;
 use rustc_feature::{Features, GatedCfg, find_gated_cfg, is_builtin_attr_name};
-use rustc_hir::{
-    ConstStability, DefaultBodyStability, DeprecatedSince, Deprecation, IntType, Repr,
-    RustcVersion, Stability, StabilityLevel, StableSince, UnstableReason,
+use rustc_attr_data_structures::{
+    ConstStability, DefaultBodyStability, DeprecatedSince, Deprecation, IntType, Repr, RustcVersion, Stability, StabilityLevel, StableSince, TransparencyError, UnstableReason,
+    VERSION_PLACEHOLDER
 };
 use rustc_session::Session;
 use rustc_session::config::ExpectedValues;
@@ -23,12 +23,6 @@ use rustc_span::symbol::{Symbol, kw, sym};
 
 use crate::fluent_generated;
 use crate::session_diagnostics::{self, IncorrectReprFormatGenericCause};
-
-/// The version placeholder that recently stabilized features contain inside the
-/// `since` field of the `#[stable]` attribute.
-///
-/// For more, see [this pull request](https://github.com/rust-lang/rust/pull/100591).
-pub const VERSION_PLACEHOLDER: &str = "CURRENT_RUSTC_VERSION";
 
 pub fn is_builtin_attr(attr: &impl AttributeExt) -> bool {
     attr.is_doc_comment() || attr.ident().is_some_and(|ident| is_builtin_attr_name(ident.name))
@@ -607,7 +601,7 @@ pub fn eval_condition(
                             sess,
                             sym::cfg_target_compact,
                             cfg.span,
-                            fluent_generated::attr_unstable_cfg_target_compact,
+                            fluent_generated::attr_parsing_unstable_cfg_target_compact,
                         )
                         .emit();
                     }
@@ -968,7 +962,7 @@ pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<Repr> {
 }
 
 fn int_type_of_word(s: Symbol) -> Option<IntType> {
-    use rustc_hir::IntType::*;
+    use rustc_attr_data_structures::IntType::*;
 
     match s {
         sym::i8 => Some(SignedInt(ast::IntTy::I8)),
@@ -985,11 +979,6 @@ fn int_type_of_word(s: Symbol) -> Option<IntType> {
         sym::usize => Some(UnsignedInt(ast::UintTy::Usize)),
         _ => None,
     }
-}
-
-pub enum TransparencyError {
-    UnknownTransparency(Symbol, Span),
-    MultipleTransparencyAttrs(Span, Span),
 }
 
 pub fn find_transparency(

@@ -4,7 +4,7 @@
 use std::mem::replace;
 use std::num::NonZero;
 
-use rustc_attr as attr;
+use rustc_attr_parsing as attr;
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_data_structures::unord::{ExtendUnord, UnordMap, UnordSet};
 use rustc_feature::{ACCEPTED_LANG_FEATURES, EnabledLangFeature, EnabledLibFeature};

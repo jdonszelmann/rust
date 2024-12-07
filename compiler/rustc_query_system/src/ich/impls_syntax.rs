@@ -34,6 +34,9 @@ impl<'a> HashStable<StableHashingContext<'a>> for [hir::Attribute] {
     }
 }
 
+
+impl<'ctx> rustc_attr_data_structures::HashStableContext for StableHashingContext<'ctx> {}
+
 impl<'ctx> rustc_hir::HashStableContext for StableHashingContext<'ctx> {
     fn hash_attr(&mut self, attr: &hir::Attribute, hasher: &mut StableHasher) {
         // Make sure that these have been filtered out.

@@ -418,7 +418,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
                     && let [item] = items.as_slice()
                     && let Some((sym::align, literal)) = item.singleton_lit_list()
                 {
-                    rustc_attr::parse_alignment(&literal.kind)
+                    rustc_attr_parsing::parse_alignment(&literal.kind)
                         .map_err(|msg| {
                             struct_span_code_err!(
                                 tcx.dcx(),

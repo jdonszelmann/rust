@@ -1,5 +1,5 @@
 use rustc_ast::attr::AttributeExt;
-use rustc_attr::parse_version;
+use rustc_attr_parsing::parse_version;
 use rustc_hir::RustcVersion;
 use rustc_session::Session;
 use rustc_span::{Symbol, sym};
