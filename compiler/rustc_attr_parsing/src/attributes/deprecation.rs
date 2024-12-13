@@ -1,121 +1,135 @@
-//! Parsing and validation of builtin attributes
-
-use rustc_ast::attr::AttributeExt;
-use rustc_ast::{MetaItem, MetaItemInner};
-use rustc_ast_pretty::pprust;
-use rustc_attr_data_structures::{DeprecatedSince, Deprecation};
-use rustc_feature::Features;
-use rustc_session::Session;
+use rustc_attr_data_structures::{AttributeKind, DeprecatedSince, Deprecation};
+use rustc_span::symbol::Ident;
 use rustc_span::{Span, Symbol, sym};
 
-use super::util::UnsupportedLiteralReason;
-use crate::{parse_version, session_diagnostics};
+use super::SingleAttributeGroup;
+use super::util::parse_version;
+use crate::context::AttributeAcceptContext;
+use crate::parser::{ArgParser, GenericArgParser, MetaItemParser, NameValueParser};
+use crate::session_diagnostics;
+use crate::session_diagnostics::UnsupportedLiteralReason;
 
-/// Finds the deprecation attribute. `None` if none exists.
-pub fn find_deprecation(
-    sess: &Session,
-    features: &Features,
-    attrs: &[impl AttributeExt],
-) -> Option<(Deprecation, Span)> {
-    let mut depr: Option<(Deprecation, Span)> = None;
-    let is_rustc = features.staged_api();
+pub(crate) struct DeprecationGroup;
 
-    'outer: for attr in attrs {
-        if !attr.has_name(sym::deprecated) {
-            continue;
+fn get<'a>(
+    cx: &AttributeAcceptContext<'_>,
+    ident: Ident,
+    param_span: Span,
+    arg: impl ArgParser<'a>,
+    item: &mut Option<Symbol>,
+) -> bool {
+    if item.is_some() {
+        cx.dcx().emit_err(session_diagnostics::MultipleItem {
+            span: param_span,
+            item: ident.to_string(),
+        });
+        return false;
+    }
+    if let Some(v) = arg.name_value() {
+        if let Some(value_str) = v.value_as_str() {
+            *item = Some(value_str);
+            true
+        } else {
+            let lit = v.value_as_lit();
+            cx.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
+                span: v.value_span(),
+                reason: UnsupportedLiteralReason::DeprecatedString,
+                is_bytestr: lit.kind.is_bytestr(),
+                start_point_span: cx.sess().source_map().start_point(lit.span),
+            });
+            false
         }
+    } else {
+        // FIXME(jdonszelmann): suggestion?
+        cx.dcx().emit_err(session_diagnostics::IncorrectMetaItem {
+            span: param_span,
+            suggestion: None,
+        });
+        false
+    }
+}
+
+impl SingleAttributeGroup for DeprecationGroup {
+    const PATH: &'static [rustc_span::Symbol] = &[sym::deprecated];
+
+    fn on_duplicate(cx: &crate::context::AttributeAcceptContext<'_>, first_span: rustc_span::Span) {
+        // FIXME(jdonszelmann): merge with errors from check_attrs.rs
+        cx.dcx().emit_err(session_diagnostics::UnusedMultiple {
+            this: cx.attr_span,
+            other: first_span,
+            name: sym::deprecated,
+        });
+    }
+
+    fn convert(
+        cx: &AttributeAcceptContext<'_>,
+        args: &GenericArgParser<'_, rustc_ast::Expr>,
+    ) -> Option<AttributeKind> {
+        let features = cx.features();
 
         let mut since = None;
         let mut note = None;
         let mut suggestion = None;
 
-        if attr.is_doc_comment() {
-            continue;
-        } else if attr.is_word() {
-        } else if let Some(value) = attr.value_str() {
-            note = Some(value)
-        } else if let Some(list) = attr.meta_item_list() {
-            let get = |meta: &MetaItem, item: &mut Option<Symbol>| {
-                if item.is_some() {
-                    sess.dcx().emit_err(session_diagnostics::MultipleItem {
-                        span: meta.span,
-                        item: pprust::path_to_string(&meta.path),
+        let is_rustc = features.staged_api();
+
+        if let Some(value) = args.name_value()
+            && let Some(value_str) = value.value_as_str()
+        {
+            note = Some(value_str)
+        } else if let Some(list) = args.list() {
+            for param in list.mixed() {
+                let param_span = param.span();
+                let Some(param) = param.meta_item() else {
+                    cx.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
+                        span: param_span,
+                        reason: UnsupportedLiteralReason::DeprecatedKvPair,
+                        is_bytestr: false,
+                        start_point_span: cx.sess().source_map().start_point(param_span),
                     });
-                    return false;
-                }
-                if let Some(v) = meta.value_str() {
-                    *item = Some(v);
-                    true
-                } else {
-                    if let Some(lit) = meta.name_value_literal() {
-                        sess.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
-                            span: lit.span,
-                            reason: UnsupportedLiteralReason::DeprecatedString,
-                            is_bytestr: lit.kind.is_bytestr(),
-                            start_point_span: sess.source_map().start_point(lit.span),
-                        });
-                    } else {
-                        sess.dcx()
-                            .emit_err(session_diagnostics::IncorrectMetaItem { span: meta.span });
+                    return None;
+                };
+
+                let (ident, arg) = param.word_or_empty();
+
+                match ident.name {
+                    sym::since => {
+                        if !get(cx, ident, param_span, arg, &mut since) {
+                            return None;
+                        }
                     }
-                    false
-                }
-            };
-
-            for meta in &list {
-                match meta {
-                    MetaItemInner::MetaItem(mi) => match mi.name_or_empty() {
-                        sym::since => {
-                            if !get(mi, &mut since) {
-                                continue 'outer;
-                            }
+                    sym::note => {
+                        if !get(cx, ident, param_span, arg, &mut note) {
+                            return None;
                         }
-                        sym::note => {
-                            if !get(mi, &mut note) {
-                                continue 'outer;
-                            }
-                        }
-                        sym::suggestion => {
-                            if !features.deprecated_suggestion() {
-                                sess.dcx().emit_err(
-                                    session_diagnostics::DeprecatedItemSuggestion {
-                                        span: mi.span,
-                                        is_nightly: sess.is_nightly_build(),
-                                        details: (),
-                                    },
-                                );
-                            }
-
-                            if !get(mi, &mut suggestion) {
-                                continue 'outer;
-                            }
-                        }
-                        _ => {
-                            sess.dcx().emit_err(session_diagnostics::UnknownMetaItem {
-                                span: meta.span(),
-                                item: pprust::path_to_string(&mi.path),
-                                expected: if features.deprecated_suggestion() {
-                                    &["since", "note", "suggestion"]
-                                } else {
-                                    &["since", "note"]
-                                },
+                    }
+                    sym::suggestion => {
+                        if !features.deprecated_suggestion() {
+                            cx.dcx().emit_err(session_diagnostics::DeprecatedItemSuggestion {
+                                span: param_span,
+                                is_nightly: cx.sess().is_nightly_build(),
+                                details: (),
                             });
-                            continue 'outer;
                         }
-                    },
-                    MetaItemInner::Lit(lit) => {
-                        sess.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
-                            span: lit.span,
-                            reason: UnsupportedLiteralReason::DeprecatedKvPair,
-                            is_bytestr: false,
-                            start_point_span: sess.source_map().start_point(lit.span),
+
+                        if !get(cx, ident, param_span, arg, &mut suggestion) {
+                            return None;
+                        }
+                    }
+                    _ => {
+                        cx.dcx().emit_err(session_diagnostics::UnknownMetaItem {
+                            span: param_span,
+                            item: ident.to_string(),
+                            expected: if features.deprecated_suggestion() {
+                                &["since", "note", "suggestion"]
+                            } else {
+                                &["since", "note"]
+                            },
                         });
-                        continue 'outer;
+                        return None;
                     }
                 }
             }
-        } else {
-            continue;
         }
 
         let since = if let Some(since) = since {
@@ -126,23 +140,24 @@ pub fn find_deprecation(
             } else if let Some(version) = parse_version(since) {
                 DeprecatedSince::RustcVersion(version)
             } else {
-                sess.dcx().emit_err(session_diagnostics::InvalidSince { span: attr.span() });
+                cx.dcx().emit_err(session_diagnostics::InvalidSince { span: cx.attr_span });
                 DeprecatedSince::Err
             }
         } else if is_rustc {
-            sess.dcx().emit_err(session_diagnostics::MissingSince { span: attr.span() });
+            cx.dcx().emit_err(session_diagnostics::MissingSince { span: cx.attr_span });
             DeprecatedSince::Err
         } else {
             DeprecatedSince::Unspecified
         };
 
         if is_rustc && note.is_none() {
-            sess.dcx().emit_err(session_diagnostics::MissingNote { span: attr.span() });
-            continue;
+            cx.dcx().emit_err(session_diagnostics::MissingNote { span: cx.attr_span });
+            return None;
         }
 
-        depr = Some((Deprecation { since, note, suggestion }, attr.span()));
+        Some(AttributeKind::Deprecation {
+            deprecation: Deprecation { since, note, suggestion },
+            span: cx.attr_span,
+        })
     }
-
-    depr
 }

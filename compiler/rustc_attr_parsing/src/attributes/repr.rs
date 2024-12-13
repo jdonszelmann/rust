@@ -1,15 +1,17 @@
-//! Parsing and validation of builtin attributes
-
 use rustc_abi::Align;
-use rustc_ast::attr::AttributeExt;
-use rustc_ast::{self as ast, MetaItemKind};
-use rustc_attr_data_structures::IntType;
-use rustc_attr_data_structures::ReprAttr::*;
-use rustc_session::Session;
-use rustc_span::{Symbol, sym};
+use rustc_ast::{IntTy, LitIntType, LitKind, MetaItemLit, UintTy};
+use rustc_attr_data_structures::{AttributeKind, IntType, ReprAttr};
+use rustc_span::symbol::Ident;
+use rustc_span::{Span, Symbol, sym};
 
-use crate::ReprAttr;
-use crate::session_diagnostics::{self, IncorrectReprFormatGenericCause};
+use super::{CombineAttributeGroup, ConvertFn};
+use crate::context::AttributeAcceptContext;
+use crate::parser::{
+    ArgParser, GenericArgParser, MetaItemListParser, MetaItemOrLitParser, MetaItemParser,
+    NameValueParser,
+};
+use crate::session_diagnostics;
+use crate::session_diagnostics::IncorrectReprFormatGenericCause;
 
 /// Parse #[repr(...)] forms.
 ///
@@ -18,185 +20,285 @@ use crate::session_diagnostics::{self, IncorrectReprFormatGenericCause};
 /// the same discriminant size that the corresponding C enum would or C
 /// structure layout, `packed` to remove padding, and `transparent` to delegate representation
 /// concerns to the only non-ZST field.
-pub fn find_repr_attrs(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr> {
-    if attr.has_name(sym::repr) { parse_repr_attr(sess, attr) } else { Vec::new() }
+// FIXME(jdonszelmann): is a vec the right representation here even? isn't it just a struct?
+pub(crate) struct ReprGroup;
+
+impl CombineAttributeGroup for ReprGroup {
+    type Item = ReprAttr;
+    const PATH: &'static [rustc_span::Symbol] = &[sym::repr];
+    const CONVERT: ConvertFn<ReprAttr> = AttributeKind::Repr;
+
+    fn extend<'a>(
+        cx: &'a AttributeAcceptContext<'a>,
+        args: &'a GenericArgParser<'a, rustc_ast::Expr>,
+    ) -> impl IntoIterator<Item = ReprAttr> + 'a {
+        let mut reprs = Vec::new();
+
+        let Some(list) = args.list() else {
+            return reprs;
+        };
+
+        for param in list.mixed() {
+            reprs.extend(param.meta_item().and_then(|mi| parse_repr(cx, &mi)));
+        }
+
+        reprs
+    }
 }
 
-pub fn parse_repr_attr(sess: &Session, attr: &impl AttributeExt) -> Vec<ReprAttr> {
-    assert!(attr.has_name(sym::repr), "expected `#[repr(..)]`, found: {attr:?}");
-    let mut acc = Vec::new();
-    let dcx = sess.dcx();
+fn parse_repr<'a, 'b>(
+    cx: &AttributeAcceptContext<'_>,
+    param: &'a impl MetaItemParser<'b>,
+) -> Option<ReprAttr> {
+    // FIXME(jdonszelmann): invert the parsing here to match on the word first and then the
+    // structure.
+    let (ident, args) = param.word_or_empty();
 
-    if let Some(items) = attr.meta_item_list() {
-        for item in items {
-            let mut recognised = false;
-            if item.is_word() {
-                let hint = match item.name_or_empty() {
-                    sym::Rust => Some(ReprRust),
-                    sym::C => Some(ReprC),
-                    sym::packed => Some(ReprPacked(Align::ONE)),
-                    sym::simd => Some(ReprSimd),
-                    sym::transparent => Some(ReprTransparent),
-                    sym::align => {
-                        sess.dcx().emit_err(session_diagnostics::InvalidReprAlignNeedArg {
-                            span: item.span(),
-                        });
-                        recognised = true;
-                        None
-                    }
-                    name => int_type_of_word(name).map(ReprInt),
-                };
+    if args.no_args() {
+        parse_simple_repr(cx, ident, param.span())
+    } else if let Some(list) = args.list() {
+        parse_list_repr(cx, ident, list, param.span())
+    } else if let Some(name_value) = args.name_value() {
+        reject_name_value_repr(cx, ident, name_value.value_as_lit(), param.span());
+        None
+    } else {
+        completely_unknown(cx, param.span());
+        None
+    }
+}
 
-                if let Some(h) = hint {
-                    recognised = true;
-                    acc.push(h);
-                }
-            } else if let Some((name, value)) = item.singleton_lit_list() {
-                let mut literal_error = None;
-                let mut err_span = item.span();
-                if name == sym::align {
-                    recognised = true;
-                    match parse_alignment(&value.kind) {
-                        Ok(literal) => acc.push(ReprAlign(literal)),
-                        Err(message) => {
-                            err_span = value.span;
-                            literal_error = Some(message)
-                        }
-                    };
-                } else if name == sym::packed {
-                    recognised = true;
-                    match parse_alignment(&value.kind) {
-                        Ok(literal) => acc.push(ReprPacked(literal)),
-                        Err(message) => {
-                            err_span = value.span;
-                            literal_error = Some(message)
-                        }
-                    };
-                } else if matches!(name, sym::Rust | sym::C | sym::simd | sym::transparent)
-                    || int_type_of_word(name).is_some()
-                {
-                    recognised = true;
-                    sess.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
-                        span: item.span(),
-                        name: name.to_ident_string(),
-                    });
-                }
-                if let Some(literal_error) = literal_error {
-                    sess.dcx().emit_err(session_diagnostics::InvalidReprGeneric {
-                        span: err_span,
-                        repr_arg: name.to_ident_string(),
-                        error_part: literal_error,
-                    });
-                }
-            } else if let Some(meta_item) = item.meta_item() {
-                match &meta_item.kind {
-                    MetaItemKind::NameValue(value) => {
-                        if meta_item.has_name(sym::align) || meta_item.has_name(sym::packed) {
-                            let name = meta_item.name_or_empty().to_ident_string();
-                            recognised = true;
-                            sess.dcx().emit_err(session_diagnostics::IncorrectReprFormatGeneric {
-                                span: item.span(),
-                                repr_arg: &name,
-                                cause: IncorrectReprFormatGenericCause::from_lit_kind(
-                                    item.span(),
-                                    &value.kind,
-                                    &name,
-                                ),
-                            });
-                        } else if matches!(
-                            meta_item.name_or_empty(),
-                            sym::Rust | sym::C | sym::simd | sym::transparent
-                        ) || int_type_of_word(meta_item.name_or_empty()).is_some()
-                        {
-                            recognised = true;
-                            sess.dcx().emit_err(session_diagnostics::InvalidReprHintNoValue {
-                                span: meta_item.span,
-                                name: meta_item.name_or_empty().to_ident_string(),
-                            });
-                        }
-                    }
-                    MetaItemKind::List(nested_items) => {
-                        if meta_item.has_name(sym::align) {
-                            recognised = true;
-                            if let [nested_item] = nested_items.as_slice() {
-                                sess.dcx().emit_err(
-                                    session_diagnostics::IncorrectReprFormatExpectInteger {
-                                        span: nested_item.span(),
-                                    },
-                                );
-                            } else {
-                                sess.dcx().emit_err(
-                                    session_diagnostics::IncorrectReprFormatAlignOneArg {
-                                        span: meta_item.span,
-                                    },
-                                );
-                            }
-                        } else if meta_item.has_name(sym::packed) {
-                            recognised = true;
-                            if let [nested_item] = nested_items.as_slice() {
-                                sess.dcx().emit_err(
-                                    session_diagnostics::IncorrectReprFormatPackedExpectInteger {
-                                        span: nested_item.span(),
-                                    },
-                                );
-                            } else {
-                                sess.dcx().emit_err(
-                                    session_diagnostics::IncorrectReprFormatPackedOneOrZeroArg {
-                                        span: meta_item.span,
-                                    },
-                                );
-                            }
-                        } else if matches!(
-                            meta_item.name_or_empty(),
-                            sym::Rust | sym::C | sym::simd | sym::transparent
-                        ) || int_type_of_word(meta_item.name_or_empty()).is_some()
-                        {
-                            recognised = true;
-                            sess.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
-                                span: meta_item.span,
-                                name: meta_item.name_or_empty().to_ident_string(),
-                            });
-                        }
-                    }
-                    _ => (),
-                }
+fn parse_list_repr<'b>(
+    cx: &AttributeAcceptContext<'_>,
+    ident: Ident,
+    list: MetaItemListParser<'b>,
+    param_span: Span,
+) -> Option<ReprAttr> {
+    if let Some(single) = list.single() {
+        match single {
+            MetaItemOrLitParser::MetaItemParser(meta) => {
+                reject_not_literal_list(cx, ident, meta.span(), param_span);
+                None
             }
-            if !recognised {
-                // Not a word we recognize. This will be caught and reported by
-                // the `check_mod_attrs` pass, but this pass doesn't always run
-                // (e.g. if we only pretty-print the source), so we have to gate
-                // the `span_delayed_bug` call as follows:
-                if sess.opts.pretty.map_or(true, |pp| pp.needs_analysis()) {
-                    dcx.span_delayed_bug(item.span(), "unrecognized representation hint");
-                }
+            MetaItemOrLitParser::Lit(lit) => parse_singleton_list_repr(cx, ident, lit, param_span),
+        }
+    } else {
+        reject_not_one_element_list(cx, ident, param_span);
+        None
+    }
+}
+
+fn reject_not_one_element_list(cx: &AttributeAcceptContext<'_>, ident: Ident, param_span: Span) {
+    match ident.name {
+        sym::align => {
+            cx.dcx()
+                .emit_err(session_diagnostics::IncorrectReprFormatAlignOneArg { span: param_span });
+        }
+        sym::packed => {
+            cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatPackedOneOrZeroArg {
+                span: param_span,
+            });
+        }
+        sym::Rust | sym::C | sym::simd | sym::transparent => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+                span: param_span,
+                name: ident.to_string(),
+            });
+        }
+        other if int_type_of_word(other).is_some() => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+                span: param_span,
+                name: ident.to_string(),
+            });
+        }
+        _ => {
+            completely_unknown(cx, param_span);
+        }
+    }
+}
+
+fn reject_not_literal_list(
+    cx: &AttributeAcceptContext<'_>,
+    ident: Ident,
+    meta_span: Span,
+    param_span: Span,
+) {
+    match ident.name {
+        sym::align => {
+            cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatExpectInteger {
+                span: meta_span,
+            });
+        }
+
+        sym::packed => {
+            cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatPackedExpectInteger {
+                span: meta_span,
+            });
+        }
+        sym::Rust | sym::C | sym::simd | sym::transparent => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+                span: param_span,
+                name: ident.to_string(),
+            });
+        }
+        other if int_type_of_word(other).is_some() => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+                span: param_span,
+                name: ident.to_string(),
+            });
+        }
+        _ => {
+            completely_unknown(cx, param_span);
+        }
+    }
+}
+
+fn reject_name_value_repr(
+    cx: &AttributeAcceptContext<'_>,
+    ident: Ident,
+    value: MetaItemLit,
+    param_span: Span,
+) {
+    match ident.name {
+        sym::align | sym::packed => {
+            cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatGeneric {
+                span: param_span,
+                // FIXME(jdonszelmann) can just be a string in the diag type
+                repr_arg: &ident.to_string(),
+                cause: IncorrectReprFormatGenericCause::from_lit_kind(
+                    param_span,
+                    &value.kind,
+                    ident.name.as_str(),
+                ),
+            });
+        }
+        sym::Rust | sym::C | sym::simd | sym::transparent => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoValue {
+                span: param_span,
+                name: ident.to_string(),
+            });
+        }
+        other if int_type_of_word(other).is_some() => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoValue {
+                span: param_span,
+                name: ident.to_string(),
+            });
+        }
+        _ => {
+            completely_unknown(cx, param_span);
+        }
+    }
+}
+
+fn parse_singleton_list_repr(
+    cx: &AttributeAcceptContext<'_>,
+    ident: Ident,
+    lit: MetaItemLit,
+    param_span: Span,
+) -> Option<ReprAttr> {
+    match ident.name {
+        sym::align => match parse_alignment(&lit.kind) {
+            Ok(literal) => Some(ReprAttr::ReprAlign(literal)),
+            Err(message) => {
+                cx.dcx().emit_err(session_diagnostics::InvalidReprGeneric {
+                    span: lit.span,
+                    repr_arg: ident.to_string(),
+                    error_part: message,
+                });
+                None
+            }
+        },
+        sym::packed => match parse_alignment(&lit.kind) {
+            Ok(literal) => Some(ReprAttr::ReprPacked(literal)),
+            Err(message) => {
+                cx.dcx().emit_err(session_diagnostics::InvalidReprGeneric {
+                    span: lit.span,
+                    repr_arg: ident.to_string(),
+                    error_part: message,
+                });
+                None
+            }
+        },
+        sym::Rust | sym::C | sym::simd | sym::transparent => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+                span: param_span,
+                name: ident.to_string(),
+            });
+            None
+        }
+        other if int_type_of_word(other).is_some() => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+                span: param_span,
+                name: ident.to_string(),
+            });
+            None
+        }
+        _ => {
+            completely_unknown(cx, param_span);
+            None
+        }
+    }
+}
+
+fn parse_simple_repr(
+    cx: &AttributeAcceptContext<'_>,
+    ident: Ident,
+    param_span: Span,
+) -> Option<ReprAttr> {
+    use ReprAttr::*;
+    match ident.name {
+        sym::Rust => Some(ReprRust),
+        sym::C => Some(ReprC),
+        sym::packed => Some(ReprPacked(Align::ONE)),
+        sym::simd => Some(ReprSimd),
+        sym::transparent => Some(ReprTransparent),
+        sym::align => {
+            cx.dcx().emit_err(session_diagnostics::InvalidReprAlignNeedArg { span: ident.span });
+            None
+        }
+        other => {
+            if let Some(int) = int_type_of_word(other) {
+                Some(ReprInt(int))
+            } else {
+                completely_unknown(cx, param_span);
+                None
             }
         }
     }
-    acc
+}
+
+// Not a word we recognize. This will be caught and reported by
+// the `check_mod_attrs` pass, but this pass doesn't always run
+// (e.g. if we only pretty-print the source), so we have to gate
+// the `span_delayed_bug` call as follows:
+// TODO: remove this in favor of just reporting the error here if we can...
+fn completely_unknown(cx: &AttributeAcceptContext<'_>, param_span: Span) {
+    if cx.sess().opts.pretty.map_or(true, |pp| pp.needs_analysis()) {
+        cx.dcx().span_delayed_bug(param_span, "unrecognized representation hint");
+    }
 }
 
 fn int_type_of_word(s: Symbol) -> Option<IntType> {
-    use rustc_attr_data_structures::IntType::*;
+    use IntType::*;
 
     match s {
-        sym::i8 => Some(SignedInt(ast::IntTy::I8)),
-        sym::u8 => Some(UnsignedInt(ast::UintTy::U8)),
-        sym::i16 => Some(SignedInt(ast::IntTy::I16)),
-        sym::u16 => Some(UnsignedInt(ast::UintTy::U16)),
-        sym::i32 => Some(SignedInt(ast::IntTy::I32)),
-        sym::u32 => Some(UnsignedInt(ast::UintTy::U32)),
-        sym::i64 => Some(SignedInt(ast::IntTy::I64)),
-        sym::u64 => Some(UnsignedInt(ast::UintTy::U64)),
-        sym::i128 => Some(SignedInt(ast::IntTy::I128)),
-        sym::u128 => Some(UnsignedInt(ast::UintTy::U128)),
-        sym::isize => Some(SignedInt(ast::IntTy::Isize)),
-        sym::usize => Some(UnsignedInt(ast::UintTy::Usize)),
+        sym::i8 => Some(SignedInt(IntTy::I8)),
+        sym::u8 => Some(UnsignedInt(UintTy::U8)),
+        sym::i16 => Some(SignedInt(IntTy::I16)),
+        sym::u16 => Some(UnsignedInt(UintTy::U16)),
+        sym::i32 => Some(SignedInt(IntTy::I32)),
+        sym::u32 => Some(UnsignedInt(UintTy::U32)),
+        sym::i64 => Some(SignedInt(IntTy::I64)),
+        sym::u64 => Some(UnsignedInt(UintTy::U64)),
+        sym::i128 => Some(SignedInt(IntTy::I128)),
+        sym::u128 => Some(UnsignedInt(UintTy::U128)),
+        sym::isize => Some(SignedInt(IntTy::Isize)),
+        sym::usize => Some(UnsignedInt(UintTy::Usize)),
         _ => None,
     }
 }
 
-pub fn parse_alignment(node: &ast::LitKind) -> Result<Align, &'static str> {
-    if let ast::LitKind::Int(literal, ast::LitIntType::Unsuffixed) = node {
+pub(crate) fn parse_alignment(node: &LitKind) -> Result<Align, &'static str> {
+    if let LitKind::Int(literal, LitIntType::Unsuffixed) = node {
         // `Align::from_bytes` accepts 0 as an input, check is_power_of_two() first
         if literal.get().is_power_of_two() {
             // Only possible error is larger than 2^29

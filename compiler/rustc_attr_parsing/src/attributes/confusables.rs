@@ -1,21 +1,61 @@
-//! Parsing and validation of builtin attributes
 
-use rustc_ast::MetaItemInner;
-use rustc_ast::attr::AttributeExt;
-use rustc_span::Symbol;
+use rustc_attr_data_structures::AttributeKind;
+use rustc_span::{Span, Symbol, sym};
+use thin_vec::ThinVec;
 
-/// Read the content of a `rustc_confusables` attribute, and return the list of candidate names.
-pub fn parse_confusables(attr: &impl AttributeExt) -> Option<Vec<Symbol>> {
-    let metas = attr.meta_item_list()?;
+use super::{AttributeGroup, AttributeMapping};
+use crate::context::AttributeGroupContext;
+use crate::parser::ArgParser;
+use crate::session_diagnostics;
 
-    let mut candidates = Vec::new();
+// TODO: turn into CombineGroup?
+#[derive(Default)]
+pub(crate) struct ConfusablesGroup {
+    confusables: ThinVec<Symbol>,
+    first_span: Option<Span>,
+}
 
-    for meta in metas {
-        let MetaItemInner::Lit(meta_lit) = meta else {
-            return None;
+impl AttributeGroup for ConfusablesGroup {
+    const ATTRIBUTES: AttributeMapping<Self> = &[(&[sym::rustc_confusables], |this, cx, args| {
+        let Some(list) = args.list() else {
+            // TODO: error when not a list? Bring validation code here.
+            //       NOTE: currently subsequent attributes are silently ignored using
+            //       tcx.get_attr().
+            return;
         };
-        candidates.push(meta_lit.symbol);
-    }
 
-    Some(candidates)
+        if list.is_empty() {
+            cx.dcx().emit_err(session_diagnostics::EmptyConfusables { span: cx.attr_span });
+        }
+
+        for param in list.mixed() {
+            let span = param.span();
+
+            let Some(lit) = param.lit() else {
+                cx.dcx().emit_err(session_diagnostics::IncorrectMetaItem {
+                    span,
+                    suggestion: Some(session_diagnostics::IncorrectMetaItemSuggestion {
+                        lo: span.shrink_to_lo(),
+                        hi: span.shrink_to_hi(),
+                    }),
+                });
+                continue;
+            };
+
+            this.confusables.push(lit.symbol);
+        }
+
+        this.first_span.get_or_insert(cx.attr_span);
+    })];
+
+    fn finalize(self, _cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+        if self.confusables.is_empty() {
+            return None;
+        }
+
+        Some(AttributeKind::Confusables {
+            symbols: self.confusables,
+            first_span: self.first_span.unwrap(),
+        })
+    }
 }

@@ -182,10 +182,10 @@ pub(crate) use StaticFields::*;
 pub(crate) use SubstructureFields::*;
 use rustc_ast::ptr::P;
 use rustc_ast::{
-    self as ast, AnonConst, BindingMode, ByRef, EnumDef, Expr, GenericArg, GenericParamKind,
-    Generics, Mutability, PatKind, VariantData,
+    self as ast, AnonConst, BindingMode, ByRef, EnumDef, Expr, GenericArg, GenericParamKind, Generics, Mutability, PatKind, VariantData
 };
-use rustc_attr_parsing as attr;
+use rustc_hir::Attribute;
+use rustc_attr_parsing::{AttributeParseContext, AttributeKind, ReprPacked};
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_span::{DUMMY_SP, Ident, Span, Symbol, kw, sym};
 use thin_vec::{ThinVec, thin_vec};
@@ -480,14 +480,10 @@ impl<'a> TraitDef<'a> {
     ) {
         match item {
             Annotatable::Item(item) => {
-                let is_packed = item.attrs.iter().any(|attr| {
-                    for r in attr::find_repr_attrs(cx.sess, attr) {
-                        if let attr::ReprPacked(_) = r {
-                            return true;
-                        }
-                    }
-                    false
-                });
+                let is_packed = matches!(
+                    AttributeParseContext::parse_limited(cx.sess, &item.attrs, sym::repr, item.span),
+                    Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.iter().any(|x| matches!(x, ReprPacked(..)))
+                );
 
                 let newitem = match &item.kind {
                     ast::ItemKind::Struct(struct_def, generics) => self.expand_struct_def(
