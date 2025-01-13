@@ -1932,7 +1932,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
 
                     self.check_align_value(*align, *repr_span);
                 }
-                ReprAttr::ReprPacked(align) => {
+                ReprAttr::ReprPacked(_) => {
                     // TODO: shouldn't we check the align here too?
                     if target != Target::Struct && target != Target::Union {
                         self.dcx().emit_err(errors::AttrApplication::StructUnion {
