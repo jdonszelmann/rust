@@ -66,6 +66,10 @@ attr_parsing_invalid_repr_hint_no_paren =
 attr_parsing_invalid_repr_hint_no_value =
     invalid representation hint: `{$name}` does not take a value
 
+attr_parsing_unrecognized_repr_hint =
+    unrecognized representation hint
+    .help = valid reprs are `Rust` (default), `C`, `align`, `packed`, `transparent`, `simd`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `i128`, `u128`, `isize`, `usize`
+
 attr_parsing_invalid_since =
     'since' must be a Rust version number, such as "1.31.0"
 
@@ -128,3 +132,6 @@ attr_parsing_unused_multiple =
     multiple `{$name}` attributes
     .suggestion = remove this attribute
     .note = attribute also specified here
+
+attr_parsing_repr_ident =
+    meta item in `repr` must be an identifier

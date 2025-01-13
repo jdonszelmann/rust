@@ -1500,7 +1500,7 @@ impl<'tcx> TyCtxt<'tcx> {
 
         if let Some(reprs) = attr::find_attr!(self.get_all_attrs(did), AttributeKind::Repr(r) => r)
         {
-            for r in reprs {
+            for (r, _) in reprs {
                 flags.insert(match *r {
                     attr::ReprRust => ReprFlags::empty(),
                     attr::ReprC => ReprFlags::IS_C,

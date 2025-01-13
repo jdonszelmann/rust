@@ -583,13 +583,6 @@ pub(crate) struct NoMangle {
 }
 
 #[derive(Diagnostic)]
-#[diag(passes_repr_ident, code = E0565)]
-pub(crate) struct ReprIdent {
-    #[primary_span]
-    pub span: Span,
-}
-
-#[derive(Diagnostic)]
 #[diag(passes_repr_conflicting, code = E0566)]
 pub(crate) struct ReprConflicting {
     #[primary_span]
@@ -1456,14 +1449,6 @@ pub(crate) struct ObjectLifetimeErr {
 }
 
 #[derive(Diagnostic)]
-#[diag(passes_unrecognized_repr_hint, code = E0552)]
-#[help]
-pub(crate) struct UnrecognizedReprHint {
-    #[primary_span]
-    pub span: Span,
-}
-
-#[derive(Diagnostic)]
 pub(crate) enum AttrApplication {
     #[diag(passes_attr_application_enum, code = E0517)]
     Enum {
@@ -1890,3 +1875,5 @@ pub(crate) struct RustcConstStableIndirectPairing {
     #[primary_span]
     pub span: Span,
 }
+
+

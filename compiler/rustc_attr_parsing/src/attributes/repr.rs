@@ -24,14 +24,14 @@ use crate::session_diagnostics::IncorrectReprFormatGenericCause;
 pub(crate) struct ReprGroup;
 
 impl CombineAttributeGroup for ReprGroup {
-    type Item = ReprAttr;
+    type Item = (ReprAttr, Span);
     const PATH: &'static [rustc_span::Symbol] = &[sym::repr];
-    const CONVERT: ConvertFn<ReprAttr> = AttributeKind::Repr;
+    const CONVERT: ConvertFn<Self::Item> = AttributeKind::Repr;
 
     fn extend<'a>(
         cx: &'a AttributeAcceptContext<'a>,
         args: &'a GenericArgParser<'a, rustc_ast::Expr>,
-    ) -> impl IntoIterator<Item = ReprAttr> + 'a {
+    ) -> impl IntoIterator<Item = Self::Item> + 'a {
         let mut reprs = Vec::new();
 
         let Some(list) = args.list() else {
@@ -39,7 +39,8 @@ impl CombineAttributeGroup for ReprGroup {
         };
 
         for param in list.mixed() {
-            reprs.extend(param.meta_item().and_then(|mi| parse_repr(cx, &mi)));
+            let span = param.span();
+            reprs.extend(param.meta_item().and_then(|mi| parse_repr(cx, &mi)).map(|r| (r, span)));
         }
 
         reprs
@@ -266,15 +267,8 @@ fn parse_simple_repr(
     }
 }
 
-// Not a word we recognize. This will be caught and reported by
-// the `check_mod_attrs` pass, but this pass doesn't always run
-// (e.g. if we only pretty-print the source), so we have to gate
-// the `span_delayed_bug` call as follows:
-// TODO: remove this in favor of just reporting the error here if we can...
 fn completely_unknown(cx: &AttributeAcceptContext<'_>, param_span: Span) {
-    if cx.sess().opts.pretty.map_or(true, |pp| pp.needs_analysis()) {
-        cx.dcx().span_delayed_bug(param_span, "unrecognized representation hint");
-    }
+    cx.dcx().emit_err(session_diagnostics::UnrecognizedReprHint { span: param_span });
 }
 
 fn int_type_of_word(s: Symbol) -> Option<IntType> {

@@ -233,7 +233,7 @@ pub enum AttributeKind {
     ProcMacro,
     ProcMacroAttribute,
     ProcMacroDerive,
-    Repr(ThinVec<ReprAttr>),
+    Repr(ThinVec<(ReprAttr, Span)>),
     Stability {
         stability: Stability,
         /// Span of the `#[stable(...)]` or `#[unstable(...)]` attribute

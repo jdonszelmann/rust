@@ -164,7 +164,7 @@ impl EarlyLintPass for NonCamelCaseTypes {
     fn check_item(&mut self, cx: &EarlyContext<'_>, it: &ast::Item) {
         let has_repr_c = matches!(
             AttributeParseContext::parse_limited(cx.sess(), &it.attrs, sym::repr, it.span),
-            Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.contains(&ReprAttr::ReprC)
+            Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.iter().any(|(r, _)| r == &ReprAttr::ReprC)
         );
 
         if has_repr_c {

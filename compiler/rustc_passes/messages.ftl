@@ -640,9 +640,6 @@ passes_repr_align_greater_than_target_max =
 passes_repr_conflicting =
     conflicting representation hints
 
-passes_repr_ident =
-    meta item in `repr` must be an identifier
-
 passes_rustc_allow_const_fn_unstable =
     attribute should be applied to `const fn`
     .label = not a `const fn`
@@ -774,10 +771,6 @@ passes_unreachable_due_to_uninhabited = unreachable {$descr}
 
 passes_unrecognized_field =
     unrecognized field name `{$name}`
-
-passes_unrecognized_repr_hint =
-    unrecognized representation hint
-    .help = valid reprs are `Rust` (default), `C`, `align`, `packed`, `transparent`, `simd`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `i128`, `u128`, `isize`, `usize`
 
 passes_unstable_attr_for_already_stable_feature =
     can't mark as unstable using an already stable feature

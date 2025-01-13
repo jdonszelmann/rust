@@ -1253,7 +1253,7 @@ pub(super) fn check_packed(tcx: TyCtxt<'_>, sp: Span, def: ty::AdtDef<'_>) {
         if let Some(reprs) =
             attr::find_attr!(tcx.get_all_attrs(def.did()), AttributeKind::Repr(r) => r)
         {
-            for r in reprs {
+            for (r, _) in reprs {
                 if let ReprPacked(pack) = r
                     && let Some(repr_pack) = repr.pack
                     && pack != &repr_pack

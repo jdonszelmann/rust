@@ -5,12 +5,14 @@
 //! conflicts between multiple such attributes attached to the same
 //! item.
 
+use core::slice::SlicePattern;
 use std::cell::Cell;
 use std::collections::hash_map::Entry;
 
+use rustc_abi::Align;
 use rustc_ast::{AttrStyle, LitKind, MetaItemInner, MetaItemKind, MetaItemLit, ast};
-use rustc_attr_parsing::ReprAttr::ReprTransparent;
-use rustc_attr_parsing::{self as attr, AttributeKind};
+use rustc_attr_parsing::ReprAttr::{self, ReprTransparent};
+use rustc_attr_parsing::{self as attr, find_attr, AttributeKind};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::{Applicability, DiagCtxtHandle, IntoDiagArg, MultiSpan, StashKey};
 use rustc_feature::{AttributeDuplicates, AttributeType, BUILTIN_ATTRIBUTE_MAP, BuiltinAttribute};
@@ -577,6 +579,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             sym::warn,
             sym::deny,
             sym::forbid,
+            // FIXME(jdonszelmann): not used, because already a new-style attr (ugh)
             sym::deprecated,
             sym::must_use,
             // abi, linking and FFI
@@ -602,6 +605,16 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     // it does not cover `#[doc = "..."]`, which is handled below
                     if other_attr.is_doc_comment() {
                         continue;
+                    }
+
+                    // FIXME(jdonszelmann): once naked uses new-style parsing,
+                    // this check can be part of the parser and be removed here
+                    match other_attr {
+                        Attribute::Parsed(AttributeKind::Deprecation { .. } | AttributeKind::Repr { .. })
+                        => {
+                            continue;
+                        },
+                        _ => {}
                     }
 
                     if !ALLOW_LIST.iter().any(|name| other_attr.has_name(*name)) {
@@ -1853,12 +1866,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         // #[repr(foo)]
         // #[repr(bar, align(8))]
         // ```
-        let hints: Vec<_> = attrs
-            .iter()
-            .filter(|attr| attr.has_name(sym::repr))
-            .filter_map(|attr| attr.meta_item_list())
-            .flatten()
-            .collect();
+        let reprs = find_attr!(attrs, AttributeKind::Repr(r) => r.as_slice()).unwrap_or(&[]);
 
         let mut int_reprs = 0;
         let mut is_explicit_rust = false;
@@ -1866,45 +1874,40 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         let mut is_simd = false;
         let mut is_transparent = false;
 
-        for hint in &hints {
-            if !hint.is_meta_item() {
-                self.dcx().emit_err(errors::ReprIdent { span: hint.span() });
-                continue;
-            }
-
-            match hint.name_or_empty() {
-                sym::Rust => {
+        for (repr, repr_span) in reprs {
+            match repr {
+                ReprAttr::ReprRust => {
                     is_explicit_rust = true;
                     match target {
                         Target::Struct | Target::Union | Target::Enum => continue,
                         _ => {
                             self.dcx().emit_err(errors::AttrApplication::StructEnumUnion {
-                                hint_span: hint.span(),
+                                hint_span: *repr_span,
                                 span,
                             });
                         }
                     }
                 }
-                sym::C => {
+                ReprAttr::ReprC => {
                     is_c = true;
                     match target {
                         Target::Struct | Target::Union | Target::Enum => continue,
                         _ => {
                             self.dcx().emit_err(errors::AttrApplication::StructEnumUnion {
-                                hint_span: hint.span(),
+                                hint_span: *repr_span,
                                 span,
                             });
                         }
                     }
                 }
-                sym::align => {
+                ReprAttr::ReprAlign(align) => {
                     if let (Target::Fn | Target::Method(MethodKind::Inherent), false) =
                         (target, self.tcx.features().fn_align())
                     {
                         feature_err(
                             &self.tcx.sess,
                             sym::fn_align,
-                            hint.span(),
+                            *repr_span,
                             fluent::passes_repr_align_function,
                         )
                         .emit();
@@ -1919,83 +1922,69 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         _ => {
                             self.dcx().emit_err(
                                 errors::AttrApplication::StructEnumFunctionMethodUnion {
-                                    hint_span: hint.span(),
+                                    hint_span: *repr_span,
                                     span,
                                 },
                             );
                         }
                     }
 
-                    self.check_align_value(hint);
+                    self.check_align_value(*align, *repr_span);
                 }
-                sym::packed => {
+                ReprAttr::ReprPacked(align) => {
+                    // TODO: shouldn't we check the align here too?
                     if target != Target::Struct && target != Target::Union {
                         self.dcx().emit_err(errors::AttrApplication::StructUnion {
-                            hint_span: hint.span(),
+                            hint_span: *repr_span,
                             span,
                         });
                     } else {
                         continue;
                     }
                 }
-                sym::simd => {
+                ReprAttr::ReprSimd => {
                     is_simd = true;
                     if target != Target::Struct {
                         self.dcx().emit_err(errors::AttrApplication::Struct {
-                            hint_span: hint.span(),
+                            hint_span: *repr_span,
                             span,
                         });
                     } else {
                         continue;
                     }
                 }
-                sym::transparent => {
+                ReprAttr::ReprTransparent => {
                     is_transparent = true;
                     match target {
                         Target::Struct | Target::Union | Target::Enum => continue,
                         _ => {
                             self.dcx().emit_err(errors::AttrApplication::StructEnumUnion {
-                                hint_span: hint.span(),
+                                hint_span: *repr_span,
                                 span,
                             });
                         }
                     }
                 }
-                sym::i8
-                | sym::u8
-                | sym::i16
-                | sym::u16
-                | sym::i32
-                | sym::u32
-                | sym::i64
-                | sym::u64
-                | sym::i128
-                | sym::u128
-                | sym::isize
-                | sym::usize => {
+                ReprAttr::ReprInt(i) => {
                     int_reprs += 1;
                     if target != Target::Enum {
                         self.dcx().emit_err(errors::AttrApplication::Enum {
-                            hint_span: hint.span(),
+                            hint_span: *repr_span,
                             span,
                         });
                     } else {
                         continue;
                     }
-                }
-                _ => {
-                    self.dcx().emit_err(errors::UnrecognizedReprHint { span: hint.span() });
-                    continue;
                 }
             };
         }
 
         // Just point at all repr hints if there are any incompatibilities.
         // This is not ideal, but tracking precisely which ones are at fault is a huge hassle.
-        let hint_spans = hints.iter().map(|hint| hint.span());
+        let hint_spans = reprs.iter().map(|(_, span)| *span);
 
         // Error on repr(transparent, <anything else>).
-        if is_transparent && hints.len() > 1 {
+        if is_transparent && reprs.len() > 1 {
             let hint_spans = hint_spans.clone().collect();
             self.dcx().emit_err(errors::TransparentIncompatible {
                 hint_spans,
@@ -2024,41 +2013,25 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         }
     }
 
-    fn check_align_value(&self, item: &MetaItemInner) {
-        match item.singleton_lit_list() {
-            Some((
-                _,
-                MetaItemLit {
-                    kind: ast::LitKind::Int(literal, ast::LitIntType::Unsuffixed), ..
-                },
-            )) => {
-                let val = literal.get() as u64;
-                if val > 2_u64.pow(29) {
-                    // for values greater than 2^29, a different error will be emitted, make sure that happens
-                    self.dcx().span_delayed_bug(
-                        item.span(),
-                        "alignment greater than 2^29 should be errored on elsewhere",
-                    );
-                } else {
-                    // only do this check when <= 2^29 to prevent duplicate errors:
-                    // alignment greater than 2^29 not supported
-                    // alignment is too large for the current target
+    fn check_align_value(&self, align: Align, span: Span) {
+        if align.bytes() > 2_u64.pow(29) {
+                // for values greater than 2^29, a different error will be emitted, make sure that happens
+            self.dcx().span_delayed_bug(
+                span,
+                "alignment greater than 2^29 should be errored on elsewhere",
+            );
+        } else {
+            // only do this check when <= 2^29 to prevent duplicate errors:
+            // alignment greater than 2^29 not supported
+            // alignment is too large for the current target
 
-                    let max =
-                        Size::from_bits(self.tcx.sess.target.pointer_width).signed_int_max() as u64;
-                    if val > max {
-                        self.dcx().emit_err(errors::InvalidReprAlignForTarget {
-                            span: item.span(),
-                            size: max,
-                        });
-                    }
-                }
-            }
-
-            // if the attribute is malformed, singleton_lit_list may not be of the expected type or may be None
-            // but an error will have already been emitted, so this code should just skip such attributes
-            Some((_, _)) | None => {
-                self.dcx().span_delayed_bug(item.span(), "malformed repr(align(N))");
+            let max =
+                Size::from_bits(self.tcx.sess.target.pointer_width).signed_int_max() as u64;
+            if align.bytes() > max {
+                self.dcx().emit_err(errors::InvalidReprAlignForTarget {
+                    span,
+                    size: max,
+                });
             }
         }
     }
@@ -2458,7 +2431,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     }
 
     fn check_rustc_pub_transparent(&self, attr_span: Span, span: Span, attrs: &[Attribute]) {
-        if !attr::find_attr!(attrs, AttributeKind::Repr(r) => r.contains(&ReprTransparent))
+        if !attr::find_attr!(attrs, AttributeKind::Repr(r) => r.iter().any(|(r, _)| r == &ReprTransparent))
             .unwrap_or(false)
         {
             self.dcx().emit_err(errors::RustcPubTransparent { span, attr_span });

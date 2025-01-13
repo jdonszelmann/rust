@@ -458,3 +458,18 @@ pub(crate) struct EmptyConfusables {
     #[primary_span]
     pub span: Span,
 }
+
+#[derive(Diagnostic)]
+#[diag(attr_parsing_repr_ident, code = E0565)]
+pub(crate) struct ReprIdent {
+    #[primary_span]
+    pub span: Span,
+}
+
+#[derive(Diagnostic)]
+#[diag(attr_parsing_unrecognized_repr_hint, code = E0552)]
+#[help]
+pub(crate) struct UnrecognizedReprHint {
+    #[primary_span]
+    pub span: Span,
+}

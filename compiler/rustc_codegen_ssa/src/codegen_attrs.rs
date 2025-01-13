@@ -107,7 +107,7 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
                 AttributeKind::Repr(reprs) => {
                     codegen_fn_attrs.alignment = reprs
                         .iter()
-                        .find_map(|r| if let ReprAlign(x) = r { Some(*x) } else { None });
+                        .find_map(|(r, _)| if let ReprAlign(x) = r { Some(*x) } else { None });
                 }
 
                 _ => {}

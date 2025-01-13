@@ -1104,7 +1104,9 @@ impl AttributeExt for Attribute {
     fn span(&self) -> Span {
         match &self {
             Attribute::Unparsed(u) => u.span,
-            _ => panic!(),
+            // FIXME: should not be needed anymore when all attrs are parsed
+            Attribute::Parsed(AttributeKind::Deprecation {  span, .. }) => *span,
+            a => panic!("can't get the span of an arbitrary parsed attribute: {a:?}"),
         }
     }
 

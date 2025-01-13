@@ -35,7 +35,7 @@ pub(crate) fn expand_deriving_coerce_pointee(
     {
         let is_transparent = matches!(
             AttributeParseContext::parse_limited(cx.sess, &aitem.attrs, sym::repr, span),
-            Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.contains(&ReprTransparent)
+            Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.iter().any(|(r, _)| r == &ReprTransparent)
         );
 
         if !is_transparent {
