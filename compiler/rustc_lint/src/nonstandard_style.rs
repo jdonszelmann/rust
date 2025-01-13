@@ -1,5 +1,5 @@
 use rustc_abi::ExternAbi;
-use rustc_attr_parsing::{AttributeParseContext, AttributeKind, ReprAttr};
+use rustc_attr_parsing::{AttributeKind, AttributeParseContext, ReprAttr};
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::intravisit::FnKind;
 use rustc_hir::{AttrArgs, AttrItem, Attribute, GenericParamKind, PatKind};

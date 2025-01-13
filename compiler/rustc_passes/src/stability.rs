@@ -5,8 +5,8 @@ use std::mem::replace;
 use std::num::NonZero;
 
 use rustc_attr_parsing::{
-    self as attr, AllowedThroughUnstableModules, ConstStability, DeprecatedSince, Stability,
-    StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER, AttributeKind, PartialConstStability, find_attr
+    self as attr, AttributeKind, ConstStability, DeprecatedSince, PartialConstStability, Stability,
+    StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER, find_attr, AllowedThroughUnstableModules
 };
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_data_structures::unord::{ExtendUnord, UnordMap, UnordSet};

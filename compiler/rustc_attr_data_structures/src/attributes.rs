@@ -1,5 +1,4 @@
 use rustc_abi::Align;
-
 use rustc_ast::token::CommentKind;
 use rustc_ast::{self as ast, AttrStyle};
 use rustc_macros::{Decodable, Encodable, HashStable_Generic};

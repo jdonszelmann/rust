@@ -6,10 +6,7 @@ use rustc_span::{Span, Symbol, sym};
 
 use super::{CombineAttributeGroup, ConvertFn};
 use crate::context::AttributeAcceptContext;
-use crate::parser::{
-    ArgParser, GenericArgParser, MetaItemListParser, MetaItemOrLitParser, MetaItemParser,
-    NameValueParser,
-};
+use crate::parser::{ArgParser, MetaItemListParser, MetaItemOrLitParser, MetaItemParser};
 use crate::session_diagnostics;
 use crate::session_diagnostics::IncorrectReprFormatGenericCause;
 
@@ -30,7 +27,7 @@ impl CombineAttributeGroup for ReprGroup {
 
     fn extend<'a>(
         cx: &'a AttributeAcceptContext<'a>,
-        args: &'a GenericArgParser<'a, rustc_ast::Expr>,
+        args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
         let mut reprs = Vec::new();
 
@@ -49,7 +46,7 @@ impl CombineAttributeGroup for ReprGroup {
 
 fn parse_repr<'a, 'b>(
     cx: &AttributeAcceptContext<'_>,
-    param: &'a impl MetaItemParser<'b>,
+    param: &'a MetaItemParser<'b>,
 ) -> Option<ReprAttr> {
     // FIXME(jdonszelmann): invert the parsing here to match on the word first and then the
     // structure.
@@ -68,10 +65,10 @@ fn parse_repr<'a, 'b>(
     }
 }
 
-fn parse_list_repr<'b>(
+fn parse_list_repr(
     cx: &AttributeAcceptContext<'_>,
     ident: Ident,
-    list: MetaItemListParser<'b>,
+    list: &MetaItemListParser<'_>,
     param_span: Span,
 ) -> Option<ReprAttr> {
     if let Some(single) = list.single() {
@@ -156,7 +153,7 @@ fn reject_not_literal_list(
 fn reject_name_value_repr(
     cx: &AttributeAcceptContext<'_>,
     ident: Ident,
-    value: MetaItemLit,
+    value: &MetaItemLit,
     param_span: Span,
 ) {
     match ident.name {
@@ -193,7 +190,7 @@ fn reject_name_value_repr(
 fn parse_singleton_list_repr(
     cx: &AttributeAcceptContext<'_>,
     ident: Ident,
-    lit: MetaItemLit,
+    lit: &MetaItemLit,
     param_span: Span,
 ) -> Option<ReprAttr> {
     match ident.name {

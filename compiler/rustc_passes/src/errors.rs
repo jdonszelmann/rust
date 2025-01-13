@@ -1875,5 +1875,3 @@ pub(crate) struct RustcConstStableIndirectPairing {
     #[primary_span]
     pub span: Span,
 }
-
-

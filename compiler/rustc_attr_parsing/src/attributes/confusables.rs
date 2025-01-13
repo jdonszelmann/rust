@@ -5,7 +5,6 @@ use thin_vec::ThinVec;
 
 use super::{AttributeGroup, AttributeMapping};
 use crate::context::AttributeGroupContext;
-use crate::parser::ArgParser;
 use crate::session_diagnostics;
 
 // TODO: turn into CombineGroup?

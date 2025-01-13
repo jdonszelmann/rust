@@ -3,7 +3,7 @@ use rustc_span::{Symbol, sym};
 
 use super::{CombineAttributeGroup, ConvertFn};
 use crate::context::AttributeAcceptContext;
-use crate::parser::{ArgParser, GenericArgParser, MetaItemParser};
+use crate::parser::ArgParser;
 use crate::session_diagnostics;
 
 pub(crate) struct AllowInternalUnstableGroup;
@@ -14,7 +14,7 @@ impl CombineAttributeGroup for AllowInternalUnstableGroup {
 
     fn extend<'a>(
         cx: &'a AttributeAcceptContext<'a>,
-        args: &'a GenericArgParser<'a, rustc_ast::Expr>,
+        args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
         parse_unstable(cx, args, Self::PATH[0])
     }
@@ -28,7 +28,7 @@ impl CombineAttributeGroup for AllowConstFnUnstableGroup {
 
     fn extend<'a>(
         cx: &'a AttributeAcceptContext<'a>,
-        args: &'a GenericArgParser<'a, rustc_ast::Expr>,
+        args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
         parse_unstable(cx, args, Self::PATH[0])
     }
@@ -36,7 +36,7 @@ impl CombineAttributeGroup for AllowConstFnUnstableGroup {
 
 fn parse_unstable<'a>(
     cx: &AttributeAcceptContext<'_>,
-    args: &'a impl ArgParser<'a>,
+    args: &'a ArgParser<'a>,
     symbol: Symbol,
 ) -> impl IntoIterator<Item = Symbol> {
     let mut res = Vec::new();

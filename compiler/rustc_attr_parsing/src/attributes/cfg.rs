@@ -11,8 +11,8 @@ use rustc_session::parse::feature_err;
 use rustc_span::symbol::kw;
 use rustc_span::{Span, Symbol, sym};
 
-use crate::{fluent_generated, parse_version};
 use crate::session_diagnostics::{self, UnsupportedLiteralReason};
+use crate::{fluent_generated, parse_version};
 
 #[derive(Clone, Debug)]
 pub struct Condition {

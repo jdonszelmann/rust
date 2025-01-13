@@ -5,17 +5,17 @@ use rustc_span::{Span, Symbol, sym};
 use super::SingleAttributeGroup;
 use super::util::parse_version;
 use crate::context::AttributeAcceptContext;
-use crate::parser::{ArgParser, GenericArgParser, MetaItemParser, NameValueParser};
+use crate::parser::ArgParser;
 use crate::session_diagnostics;
 use crate::session_diagnostics::UnsupportedLiteralReason;
 
 pub(crate) struct DeprecationGroup;
 
-fn get<'a>(
+fn get(
     cx: &AttributeAcceptContext<'_>,
     ident: Ident,
     param_span: Span,
-    arg: impl ArgParser<'a>,
+    arg: &ArgParser<'_>,
     item: &mut Option<Symbol>,
 ) -> bool {
     if item.is_some() {
@@ -32,7 +32,7 @@ fn get<'a>(
         } else {
             let lit = v.value_as_lit();
             cx.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
-                span: v.value_span(),
+                span: v.value_span,
                 reason: UnsupportedLiteralReason::DeprecatedString,
                 is_bytestr: lit.kind.is_bytestr(),
                 start_point_span: cx.sess().source_map().start_point(lit.span),
@@ -52,7 +52,7 @@ fn get<'a>(
 impl SingleAttributeGroup for DeprecationGroup {
     const PATH: &'static [rustc_span::Symbol] = &[sym::deprecated];
 
-    fn on_duplicate(cx: &crate::context::AttributeAcceptContext<'_>, first_span: rustc_span::Span) {
+    fn on_duplicate(cx: &AttributeAcceptContext<'_>, first_span: rustc_span::Span) {
         // FIXME(jdonszelmann): merge with errors from check_attrs.rs
         cx.dcx().emit_err(session_diagnostics::UnusedMultiple {
             this: cx.attr_span,
@@ -61,10 +61,7 @@ impl SingleAttributeGroup for DeprecationGroup {
         });
     }
 
-    fn convert(
-        cx: &AttributeAcceptContext<'_>,
-        args: &GenericArgParser<'_, rustc_ast::Expr>,
-    ) -> Option<AttributeKind> {
+    fn convert(cx: &AttributeAcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind> {
         let features = cx.features();
 
         let mut since = None;

@@ -6,7 +6,7 @@ use rustc_ast::{
     self as ast, GenericArg, GenericBound, GenericParamKind, ItemKind, MetaItem,
     TraitBoundModifiers, VariantData, WherePredicate,
 };
-use rustc_attr_parsing::{AttributeParseContext, AttributeKind, ReprTransparent};
+use rustc_attr_parsing::{AttributeKind, AttributeParseContext, ReprTransparent};
 use rustc_data_structures::flat_map_in_place::FlatMapInPlace;
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_hir::Attribute;

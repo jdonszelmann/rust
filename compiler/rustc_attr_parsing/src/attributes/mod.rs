@@ -17,13 +17,12 @@
 
 use std::marker::PhantomData;
 
-use rustc_ast::Expr;
 use rustc_attr_data_structures::AttributeKind;
 use rustc_span::Span;
 use thin_vec::ThinVec;
 
 use crate::context::{AttributeAcceptContext, AttributeGroupContext};
-use crate::parser::GenericArgParser;
+use crate::parser::ArgParser;
 
 pub(crate) mod allow_unstable;
 pub(crate) mod cfg;
@@ -34,7 +33,7 @@ pub(crate) mod stability;
 pub(crate) mod transparency;
 pub(crate) mod util;
 
-type AttributeHandler<T> = fn(&mut T, &AttributeAcceptContext<'_>, &GenericArgParser<'_, Expr>);
+type AttributeHandler<T> = fn(&mut T, &AttributeAcceptContext<'_>, &ArgParser<'_>);
 type AttributeMapping<T> = &'static [(&'static [rustc_span::Symbol], AttributeHandler<T>)];
 
 /// An [`AttributeGroup`] is a type which searches for syntactic attributes.
@@ -75,10 +74,7 @@ pub(crate) trait SingleAttributeGroup: 'static {
 
     /// The extractor has gotten a chance to accept the attributes on an item,
     /// now produce an attribute.
-    fn convert(
-        cx: &AttributeAcceptContext<'_>,
-        args: &GenericArgParser<'_, Expr>,
-    ) -> Option<AttributeKind>;
+    fn convert(cx: &AttributeAcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind>;
 }
 
 pub(crate) struct Single<T: SingleAttributeGroup>(PhantomData<T>, Option<(AttributeKind, Span)>);
@@ -125,7 +121,7 @@ pub(crate) trait CombineAttributeGroup: 'static {
     /// now produce an attribute.
     fn extend<'a>(
         cx: &'a AttributeAcceptContext<'a>,
-        args: &'a GenericArgParser<'a, Expr>,
+        args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a;
 }
 

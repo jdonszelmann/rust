@@ -12,15 +12,15 @@ use std::collections::hash_map::Entry;
 use rustc_abi::Align;
 use rustc_ast::{AttrStyle, LitKind, MetaItemInner, MetaItemKind, MetaItemLit, ast};
 use rustc_attr_parsing::ReprAttr::{self, ReprTransparent};
-use rustc_attr_parsing::{self as attr, find_attr, AttributeKind};
+use rustc_attr_parsing::{self as attr, AttributeKind, find_attr};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::{Applicability, DiagCtxtHandle, IntoDiagArg, MultiSpan, StashKey};
 use rustc_feature::{AttributeDuplicates, AttributeType, BUILTIN_ATTRIBUTE_MAP, BuiltinAttribute};
 use rustc_hir::def_id::LocalModDefId;
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{
-    self as hir, self, AssocItemKind, Attribute, CRATE_HIR_ID, CRATE_OWNER_ID,
-    FnSig, ForeignItem, HirId, Item, ItemKind, MethodKind, Safety, Target, TraitItem,
+    self as hir, self, AssocItemKind, Attribute, CRATE_HIR_ID, CRATE_OWNER_ID, FnSig, ForeignItem,
+    HirId, Item, ItemKind, MethodKind, Safety, Target, TraitItem,
 };
 use rustc_macros::LintDiagnostic;
 use rustc_middle::hir::nested_filter;
@@ -610,10 +610,11 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     // FIXME(jdonszelmann): once naked uses new-style parsing,
                     // this check can be part of the parser and be removed here
                     match other_attr {
-                        Attribute::Parsed(AttributeKind::Deprecation { .. } | AttributeKind::Repr { .. })
-                        => {
+                        Attribute::Parsed(
+                            AttributeKind::Deprecation { .. } | AttributeKind::Repr { .. },
+                        ) => {
                             continue;
-                        },
+                        }
                         _ => {}
                     }
 
@@ -2015,7 +2016,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
 
     fn check_align_value(&self, align: Align, span: Span) {
         if align.bytes() > 2_u64.pow(29) {
-                // for values greater than 2^29, a different error will be emitted, make sure that happens
+            // for values greater than 2^29, a different error will be emitted, make sure that happens
             self.dcx().span_delayed_bug(
                 span,
                 "alignment greater than 2^29 should be errored on elsewhere",
@@ -2025,13 +2026,9 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             // alignment greater than 2^29 not supported
             // alignment is too large for the current target
 
-            let max =
-                Size::from_bits(self.tcx.sess.target.pointer_width).signed_int_max() as u64;
+            let max = Size::from_bits(self.tcx.sess.target.pointer_width).signed_int_max() as u64;
             if align.bytes() > max {
-                self.dcx().emit_err(errors::InvalidReprAlignForTarget {
-                    span,
-                    size: max,
-                });
+                self.dcx().emit_err(errors::InvalidReprAlignForTarget { span, size: max });
             }
         }
     }

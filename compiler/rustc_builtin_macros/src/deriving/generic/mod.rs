@@ -182,11 +182,12 @@ pub(crate) use StaticFields::*;
 pub(crate) use SubstructureFields::*;
 use rustc_ast::ptr::P;
 use rustc_ast::{
-    self as ast, AnonConst, BindingMode, ByRef, EnumDef, Expr, GenericArg, GenericParamKind, Generics, Mutability, PatKind, VariantData
+    self as ast, AnonConst, BindingMode, ByRef, EnumDef, Expr, GenericArg, GenericParamKind,
+    Generics, Mutability, PatKind, VariantData,
 };
-use rustc_hir::Attribute;
-use rustc_attr_parsing::{AttributeParseContext, AttributeKind, ReprPacked};
+use rustc_attr_parsing::{AttributeKind, AttributeParseContext, ReprPacked};
 use rustc_expand::base::{Annotatable, ExtCtxt};
+use rustc_hir::Attribute;
 use rustc_span::{DUMMY_SP, Ident, Span, Symbol, kw, sym};
 use thin_vec::{ThinVec, thin_vec};
 use ty::{Bounds, Path, Ref, Self_, Ty};

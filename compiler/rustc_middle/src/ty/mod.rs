@@ -28,6 +28,7 @@ use rustc_abi::{Align, FieldIdx, Integer, IntegerType, ReprFlags, ReprOptions, V
 use rustc_ast::expand::StrippedCfgItem;
 use rustc_ast::node_id::NodeMap;
 pub use rustc_ast_ir::{Movability, Mutability, try_visit};
+use rustc_attr_parsing::AttributeKind;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet};
 use rustc_data_structures::intern::Interned;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
@@ -37,7 +38,6 @@ use rustc_hir::LangItem;
 use rustc_hir::def::{CtorKind, CtorOf, DefKind, DocLinkResMap, LifetimeRes, Res};
 use rustc_hir::def_id::{CrateNum, DefId, DefIdMap, LocalDefId, LocalDefIdMap};
 use rustc_index::IndexVec;
-use rustc_attr_parsing::AttributeKind;
 use rustc_macros::{
     Decodable, Encodable, HashStable, TyDecodable, TyEncodable, TypeFoldable, TypeVisitable,
     extension,
@@ -1764,7 +1764,6 @@ impl<'tcx> TyCtxt<'tcx> {
         if let Some(did) = did.as_local() {
             self.hir().attrs(self.local_def_id_to_hir_id(did)).iter()
         } else {
-
             // TODO: commented this check because we don't have the attr symbol from get_attrs here
             // debug_assert!(rustc_feature::encode_cross_crate(attr));
             self.attrs_for_def(did).iter()

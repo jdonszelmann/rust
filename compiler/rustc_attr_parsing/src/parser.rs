@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use core::panic;
 use std::fmt::{Debug, Display};
 use std::iter::Peekable;
 
@@ -96,56 +96,34 @@ impl Display for PathParser<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum Args<'a, T: Clone> {
-    Empty,
-    Delimited(Cow<'a, DelimArgs>),
-    Eq { eq_span: Span, value: Cow<'a, T>, value_span: Span },
+#[must_use]
+pub(crate) enum ArgParser<'a> {
+    NoArgs,
+    List(MetaItemListParser<'a>),
+    NameValue(NameValueParser),
 }
 
-impl<'a, T: Clone> Args<'a, T> {
+impl<'a> ArgParser<'a> {
     pub(crate) fn span(&self) -> Option<Span> {
         match self {
-            Args::Empty => None,
-            Args::Delimited(delim_args) => Some(delim_args.dspan.entire()),
-            Args::Eq { eq_span, value_span, .. } => Some(value_span.with_lo(eq_span.lo())),
+            Self::NoArgs => None,
+            Self::List(l) => Some(l.span),
+            Self::NameValue(n) => Some(n.value_span.with_lo(n.eq_span.lo())),
         }
     }
-}
 
-impl<'a> Args<'a, Expr> {
-    fn from_attr_args(value: &'a AttrArgs) -> Self {
+    pub(crate) fn from_attr_args(value: &'a AttrArgs, dcx: DiagCtxtHandle<'a>) -> Self {
         match value {
-            AttrArgs::Empty => Self::Empty,
-            AttrArgs::Delimited(delim_args) => Self::Delimited(Cow::Borrowed(delim_args)),
-            AttrArgs::Eq { eq_span, expr } => {
-                Self::Eq { eq_span: *eq_span, value: Cow::Borrowed(expr), value_span: expr.span }
-            }
-        }
-    }
-}
-
-impl Args<'_, MetaItemLit> {
-    fn from_attr_args(value: AttrArgs, dcx: DiagCtxtHandle<'_>) -> Self {
-        match value {
-            AttrArgs::Empty => Self::Empty,
-            AttrArgs::Delimited(delim_args) => Self::Delimited(Cow::Owned(delim_args)),
-            AttrArgs::Eq { eq_span, expr } => Self::Eq {
-                eq_span,
-                value: Cow::Owned(expr_to_lit(dcx, &expr)),
+            AttrArgs::Empty => Self::NoArgs,
+            AttrArgs::Delimited(args) if args.delim == Delimiter::Parenthesis => Self::List(MetaItemListParser::new(args, dcx)),
+            AttrArgs::Delimited(_) => todo!("nice diagnostic?"),
+            AttrArgs::Eq { eq_span, expr } => Self::NameValue( NameValueParser {
+                eq_span: *eq_span,
+                value: expr_to_lit(dcx, &expr),
                 value_span: expr.span,
-            },
+            }),
         }
     }
-}
-
-#[must_use]
-pub(crate) struct GenericArgParser<'a, T: Clone> {
-    args: Args<'a, T>,
-    dcx: DiagCtxtHandle<'a>,
-}
-
-pub(crate) trait ArgParser<'a> {
-    type NameValueParser: NameValueParser<'a>;
 
     /// Asserts that this MetaItem is a list
     ///
@@ -153,10 +131,12 @@ pub(crate) trait ArgParser<'a> {
     ///
     /// - `#[allow(clippy::complexity)]`: `(clippy::complexity)` is a list
     /// - `#[rustfmt::skip::macros(target_macro_name)]`: `(target_macro_name)` is a list
-    fn list<'s, 'r>(&'s self) -> Option<MetaItemListParser<'r>>
-    where
-        's: 'r,
-        'a: 'r;
+    pub(crate) fn list(&self) -> Option<&MetaItemListParser<'a>> {
+        match self {
+            Self::List(l)  => Some(l),
+            Self::NameValue(_) | Self::NoArgs => None,
+        }
+    }
 
     /// Asserts that this MetaItem is a name-value pair.
     ///
@@ -167,74 +147,30 @@ pub(crate) trait ArgParser<'a> {
     ///   to get an `ArgParser`, so this method will effectively only assert that the `= "100"` is
     ///   there
     /// - `#[doc = "hello"]`: `doc = "hello`  is also a name value pair
-    fn name_value(&self) -> Option<Self::NameValueParser>;
+    pub(crate) fn name_value(&self) -> Option<&NameValueParser> {
+        match self {
+            Self::NameValue(n) => Some(n),
+            Self::List(_) | Self::NoArgs => None,
+        }
+    }
 
     /// Asserts that there are no arguments
-    fn no_args(&self) -> bool;
+    pub(crate) fn no_args(&self) -> bool {
+        matches!(self, Self::NoArgs)
+    }
 }
-
-macro_rules! argparser {
-    ($ty: ty) => {
-        impl<'a> ArgParser<'a> for GenericArgParser<'a, $ty> {
-            type NameValueParser = GenericNameValueParser<'a, $ty>;
-
-            fn list<'s, 'r>(&'s self) -> Option<MetaItemListParser<'r>>
-            where
-                's: 'r,
-                'a: 'r,
-            {
-                match &self.args {
-                    Args::Delimited(args) if args.delim == Delimiter::Parenthesis => Some(
-                        MetaItemListParserContext {
-                            inside_delimiters: args.tokens.iter().peekable(),
-                            dcx: self.dcx,
-                        }
-                        .parse()
-                        .unwrap(),
-                    ),
-                    Args::Delimited(_) | Args::Eq { .. } | Args::Empty => None,
-                }
-            }
-
-            fn name_value(&self) -> Option<GenericNameValueParser<'a, $ty>> {
-                match &self.args {
-                    Args::Eq { eq_span, value, value_span } => Some(GenericNameValueParser {
-                        eq_span: *eq_span,
-                        value: value.to_owned(),
-                        value_span: *value_span,
-                        dcx: self.dcx,
-                    }),
-                    Args::Delimited(_) | Args::Empty => None,
-                }
-            }
-
-            fn no_args(&self) -> bool {
-                matches!(&self.args, Args::Empty)
-            }
-        }
-    };
-}
-
-argparser!(Expr);
-argparser!(MetaItemLit);
 
 /// Inside lists, values could be either literals, or more deeply nested meta items.
 /// This enum represents that.
 ///
 /// Choose which one you want using the provided methods.
-#[derive(Debug)]
-pub(crate) enum MetaItemOrLitParser<'a, T: Clone>
-where
-    GenericMetaItemParser<'a, T>: MetaItemParser<'a>,
-{
-    MetaItemParser(GenericMetaItemParser<'a, T>),
+#[derive(Debug, Clone)]
+pub(crate) enum MetaItemOrLitParser<'a> {
+    MetaItemParser(MetaItemParser<'a>),
     Lit(MetaItemLit),
 }
 
-impl<'a, T: Clone> MetaItemOrLitParser<'a, T>
-where
-    GenericMetaItemParser<'a, T>: MetaItemParser<'a>,
-{
+impl<'a> MetaItemOrLitParser<'a> {
     pub(crate) fn span(&self) -> Span {
         match self {
             MetaItemOrLitParser::MetaItemParser(generic_meta_item_parser) => {
@@ -244,14 +180,14 @@ where
         }
     }
 
-    pub(crate) fn lit(self) -> Option<MetaItemLit> {
+    pub(crate) fn lit(&self) -> Option<&MetaItemLit> {
         match self {
             MetaItemOrLitParser::Lit(meta_item_lit) => Some(meta_item_lit),
             _ => None,
         }
     }
 
-    pub(crate) fn meta_item(self) -> Option<GenericMetaItemParser<'a, T>> {
+    pub(crate) fn meta_item(&self) -> Option<&MetaItemParser<'a>> {
         match self {
             MetaItemOrLitParser::MetaItemParser(parser) => Some(parser),
             _ => None,
@@ -272,45 +208,54 @@ where
 ///   `= value` part
 ///
 /// The syntax of MetaItems can be found at <https://doc.rust-lang.org/reference/attributes.html>
-pub(crate) struct GenericMetaItemParser<'a, T: Clone> {
+#[derive(Clone)]
+pub(crate) struct MetaItemParser<'a> {
     path: PathParser<'a>,
-    args: Args<'a, T>,
+    args: ArgParser<'a>,
     dcx: DiagCtxtHandle<'a>,
 }
 
-impl<'a, T: Clone + Debug> Debug for GenericMetaItemParser<'a, T> {
+impl<'a> Debug for MetaItemParser<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GenericMetaItemParser")
+        f.debug_struct("MetaItemParser")
             .field("path", &self.path)
             .field("args", &self.args)
             .finish()
     }
 }
 
-impl<'a> GenericMetaItemParser<'a, Expr> {
+impl<'a> MetaItemParser<'a> {
     /// Create a new parser from a [`NormalAttr`], which is stored inside of any
     /// [`ast::Attribute`](Attribute)
     pub(crate) fn from_attr(attr: &'a NormalAttr, dcx: DiagCtxtHandle<'a>) -> Self {
         Self {
             path: PathParser::Ast(&attr.item.path),
-            args: Args::<Expr>::from_attr_args(&attr.item.args),
+            args: ArgParser::from_attr_args(&attr.item.args, dcx),
             dcx,
         }
     }
 }
 
-pub(crate) trait MetaItemParser<'a>: Debug + 'a {
-    type ArgParser: ArgParser<'a>;
-
-    fn span(&self) -> Span;
+impl<'a> MetaItemParser<'a> {
+    pub(crate) fn span(&self) -> Span {
+        if let Some(other) = self.args.span() {
+            self.path.span().with_hi(other.hi())
+        } else {
+            self.path.span()
+        }
+    }
 
     /// Gets just the path, without the args.
-    fn path_without_args(&self) -> PathParser<'a>;
+    pub(crate) fn path_without_args(&self) -> PathParser<'a> {
+        self.path.clone()
+    }
 
     /// Gets just the args parser, without caring about the path.
-    fn args(&self) -> Self::ArgParser;
+    pub(crate) fn args(&self) -> &ArgParser<'a> {
+        &self.args
+    }
 
-    fn deconstruct(&self) -> (PathParser<'a>, Self::ArgParser) {
+    pub(crate) fn deconstruct(&self) -> (PathParser<'a>, &ArgParser<'a>) {
         (self.path_without_args(), self.args())
     }
 
@@ -321,7 +266,7 @@ pub(crate) trait MetaItemParser<'a>: Debug + 'a {
     /// - `#[inline]`: `inline` is a single segment path
     /// - `#[inline(always)]`: `always` is a single segment path, but `inline` is *not and
     ///    should be parsed using [`list`](Self::list)
-    fn path(&self) -> (PathParser<'a>, Self::ArgParser) {
+    pub(crate) fn path(&self) -> (PathParser<'a>, &ArgParser<'a>) {
         self.deconstruct()
     }
 
@@ -329,12 +274,12 @@ pub(crate) trait MetaItemParser<'a>: Debug + 'a {
     /// Doesn't return the args parser.
     ///
     /// For examples. see [`Self::word`]
-    fn word_without_args(&self) -> Option<Ident> {
+    pub(crate) fn word_without_args(&self) -> Option<Ident> {
         Some(self.word()?.0)
     }
 
     /// Like [`word`](Self::word), but returns an empty symbol instead of None
-    fn word_or_empty_without_args(&self) -> Ident {
+    pub(crate) fn word_or_empty_without_args(&self) -> Ident {
         self.word_or_empty().0
     }
 
@@ -347,13 +292,13 @@ pub(crate) trait MetaItemParser<'a>: Debug + 'a {
     ///   using [`path_list`](Self::path_list)
     /// - `#[allow(clippy::complexity)]`: `clippy::complexity` is *not* a word, and should instead be parsed
     ///   using [`path`](Self::path)
-    fn word(&self) -> Option<(Ident, Self::ArgParser)> {
+    pub(crate) fn word(&self) -> Option<(Ident, &ArgParser<'a>)> {
         let (path, args) = self.deconstruct();
         Some((path.word()?, args))
     }
 
     /// Like [`word`](Self::word), but returns an empty symbol instead of None
-    fn word_or_empty(&self) -> (Ident, Self::ArgParser) {
+    pub(crate) fn word_or_empty(&self) -> (Ident, &ArgParser<'a>) {
         let (path, args) = self.deconstruct();
         (path.word().unwrap_or(Ident::empty()), args)
     }
@@ -361,72 +306,28 @@ pub(crate) trait MetaItemParser<'a>: Debug + 'a {
     /// Asserts that this MetaItem starts with some specific word.
     ///
     /// See [`word`](Self::word) for examples of what a word is.
-    fn word_is(&self, sym: Symbol) -> Option<Self::ArgParser> {
+    pub(crate) fn word_is(&self, sym: Symbol) -> Option<&ArgParser<'a>> {
         self.path_without_args().word_is(sym).then(|| self.args())
     }
 
     /// Asserts that this MetaItem starts with some specific path.
     ///
     /// See [`word`](Self::path) for examples of what a word is.
-    fn path_is(&self, segments: &[Symbol]) -> Option<Self::ArgParser> {
+    pub(crate) fn path_is(&self, segments: &[Symbol]) -> Option<&ArgParser<'a>> {
         self.path_without_args().segments_is(segments).then(|| self.args())
     }
 }
 
-impl<'a> MetaItemParser<'a> for GenericMetaItemParser<'a, Expr> {
-    type ArgParser = GenericArgParser<'a, Expr>;
-
-    fn span(&self) -> Span {
-        if let Some(other) = self.args.span() {
-            self.path.span().with_hi(other.hi())
-        } else {
-            self.path.span()
-        }
-    }
-
-    /// Gets just the path, without the args.
-    fn path_without_args(&self) -> PathParser<'a> {
-        self.path.clone()
-    }
-
-    /// Gets just the args parser, without caring about the path.
-    fn args(&self) -> GenericArgParser<'a, Expr> {
-        GenericArgParser { args: self.args.clone(), dcx: self.dcx }
-    }
-}
-
-impl<'a> MetaItemParser<'a> for GenericMetaItemParser<'a, MetaItemLit> {
-    type ArgParser = GenericArgParser<'a, MetaItemLit>;
-
-    fn span(&self) -> Span {
-        if let Some(other) = self.args.span() {
-            self.path.span().with_hi(other.hi())
-        } else {
-            self.path.span()
-        }
-    }
-
-    /// Gets just the path, without the args.
-    fn path_without_args(&self) -> PathParser<'a> {
-        self.path.clone()
-    }
-
-    /// Gets just the args parser, without caring about the path.
-    fn args(&self) -> GenericArgParser<'a, MetaItemLit> {
-        GenericArgParser { args: self.args.clone(), dcx: self.dcx }
-    }
-}
-
-pub(crate) struct GenericNameValueParser<'a, T: Clone> {
+#[derive(Clone)]
+pub(crate) struct NameValueParser {
     pub(crate) eq_span: Span,
-    value: Cow<'a, T>,
+    value: MetaItemLit,
     pub(crate) value_span: Span,
-    dcx: DiagCtxtHandle<'a>,
 }
 
-impl<'a, T: Clone + Debug> Debug for GenericNameValueParser<'a, T> {
+impl Debug for NameValueParser {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GenericNameValueParser")
+        f.debug_struct("NameValueParser")
             .field("eq_span", &self.eq_span)
             .field("value", &self.value)
             .field("value_span", &self.value_span)
@@ -434,31 +335,13 @@ impl<'a, T: Clone + Debug> Debug for GenericNameValueParser<'a, T> {
     }
 }
 
-pub(crate) trait NameValueParser<'a>: Debug {
-    fn value_span(&self) -> Span;
+impl NameValueParser {
+    pub(crate) fn value_as_lit(&self) -> &MetaItemLit {
+        &self.value
+    }
 
-    fn value_as_lit(&self) -> MetaItemLit;
-    fn value_as_str(&self) -> Option<Symbol> {
+    pub(crate) fn value_as_str(&self) -> Option<Symbol> {
         self.value_as_lit().kind.str()
-    }
-}
-
-impl<'a> NameValueParser<'a> for GenericNameValueParser<'a, Expr> {
-    fn value_as_lit(&self) -> MetaItemLit {
-        expr_to_lit(self.dcx, &self.value)
-    }
-
-    fn value_span(&self) -> Span {
-        self.value_span
-    }
-}
-
-impl<'a> NameValueParser<'a> for GenericNameValueParser<'a, MetaItemLit> {
-    fn value_as_lit(&self) -> MetaItemLit {
-        self.value.clone().into_owned()
-    }
-    fn value_span(&self) -> Span {
-        self.value_span
     }
 }
 
@@ -486,7 +369,7 @@ impl<'a> MetaItemListParserContext<'a> {
         self.inside_delimiters.peek().is_none()
     }
 
-    fn next_path(&mut self) -> Option<AttrPath> {
+    fn next_path(&mut self) -> AttrPath {
         // FIXME: Share code with `parse_path`.
         let tt = self.inside_delimiters.next().map(|tt| TokenTree::uninterpolate(tt));
 
@@ -502,10 +385,10 @@ impl<'a> MetaItemListParserContext<'a> {
                         self.inside_delimiters.next();
                         vec![Ident::new(name, span)]
                     } else {
-                        return Some(AttrPath {
+                        return AttrPath {
                             segments: vec![Ident::new(name, span)].into_boxed_slice(),
                             span,
-                        });
+                        };
                     }
                 } else {
                     vec![Ident::new(kw::PathRoot, span)]
@@ -519,7 +402,7 @@ impl<'a> MetaItemListParserContext<'a> {
                     {
                         segments.push(Ident::new(name, span));
                     } else {
-                        return None;
+                        unreachable!()
                     }
                     if let Some(TokenTree::Token(Token { kind: token::PathSep, .. }, _)) =
                         self.inside_delimiters.peek()
@@ -530,7 +413,7 @@ impl<'a> MetaItemListParserContext<'a> {
                     }
                 }
                 let span = span.with_hi(segments.last().unwrap().span.hi());
-                Some(AttrPath { segments: segments.into_boxed_slice(), span })
+                AttrPath { segments: segments.into_boxed_slice(), span }
             }
             Some(TokenTree::Token(
                 Token { kind: token::OpenDelim(_) | token::CloseDelim(_), .. },
@@ -538,11 +421,11 @@ impl<'a> MetaItemListParserContext<'a> {
             )) => {
                 panic!("Should be `AttrTokenTree::Delimited`, not delim tokens: {:?}", tt);
             }
-            _ => return None,
+            x => unreachable!("{x:?}"),
         }
     }
 
-    fn value(&mut self) -> Option<MetaItemLit> {
+    fn value(&mut self) -> MetaItemLit {
         match self.inside_delimiters.next() {
             Some(TokenTree::Delimited(.., Delimiter::Invisible(_), inner_tokens)) => {
                 MetaItemListParserContext {
@@ -551,103 +434,121 @@ impl<'a> MetaItemListParserContext<'a> {
                 }
                 .value()
             }
-            Some(TokenTree::Token(ref token, _)) => MetaItemLit::from_token(token),
-            _ => None,
+            Some(TokenTree::Token(ref token, _)) => MetaItemLit::from_token(token).unwrap(),
+            x => unreachable!("{x:?}"),
         }
     }
 
-    fn next(&mut self) -> Option<MetaItemOrLitParser<'a, MetaItemLit>> {
+    fn next(&mut self) -> MetaItemOrLitParser<'a> {
         // a list element is either a literal
         if let Some(TokenTree::Token(token, _)) = self.inside_delimiters.peek()
             && let Some(lit) = MetaItemLit::from_token(token)
         {
             self.inside_delimiters.next();
-            return Some(MetaItemOrLitParser::Lit(lit));
+            return MetaItemOrLitParser::Lit(lit);
         }
 
         // or a path.
-        let path = self.next_path()?;
+        let path = if let Some(TokenTree::Token(Token { kind: token::Interpolated(nt), .. }, _)) = self.inside_delimiters.peek()
+        {
+            match &**nt {
+                // or maybe a full nt meta including the path but we return immediately
+                token::Nonterminal::NtMeta(item) => {
+                    self.inside_delimiters.next();
+
+                    return MetaItemOrLitParser::MetaItemParser(MetaItemParser {
+                        path: PathParser::Ast(&item.path),
+                        args: ArgParser::from_attr_args(&item.args, self.dcx),
+                        dcx: self.dcx,
+                    })
+                }
+                token::Nonterminal::NtPath(path) => {
+                    self.inside_delimiters.next();
+
+
+                    AttrPath::from_ast(path)
+                }
+                _ => {
+                    unreachable!()
+                }
+            }
+        } else {
+            self.next_path()
+        };
+
+
 
         // Paths can be followed by:
         // - `(more meta items)` (another list)
         // - `= lit` (a name-value)
         // - nothing
-        Some(MetaItemOrLitParser::MetaItemParser(match self.inside_delimiters.peek() {
-            Some(TokenTree::Token(Token { kind: token::Interpolated(nt), .. }, _)) => match &**nt {
-                token::Nonterminal::NtMeta(item) => GenericMetaItemParser {
-                    path: PathParser::Ast(&item.path),
-                    args: Args::<MetaItemLit>::from_attr_args(item.args.clone(), self.dcx),
-                    dcx: self.dcx,
-                },
-                token::Nonterminal::NtPath(path) => GenericMetaItemParser {
-                    path: PathParser::Ast(path),
-                    args: Args::Empty,
-                    dcx: self.dcx,
-                },
-                _ => return None,
-            },
-            Some(TokenTree::Delimited(dspan, _, delim @ Delimiter::Parenthesis, inner_tokens)) => {
-                let inner_tokens = inner_tokens.clone();
+        MetaItemOrLitParser::MetaItemParser(match self.inside_delimiters.peek() {
+            Some(TokenTree::Delimited(dspan, _, Delimiter::Parenthesis, inner_tokens)) => {
                 self.inside_delimiters.next();
 
-                GenericMetaItemParser {
+                MetaItemParser {
                     path: PathParser::Attr(path),
-                    args: Args::Delimited(Cow::Owned(DelimArgs {
-                        dspan: *dspan,
-                        delim: *delim,
-                        tokens: inner_tokens,
-                    })),
+                    args: ArgParser::List(MetaItemListParser::new_tts(inner_tokens.iter(), dspan.entire(), self.dcx)),
                     dcx: self.dcx,
                 }
             }
             // FIXME(jdonszelmann) nice error?
             // tests seem to say its already parsed and rejected maybe?
-            Some(TokenTree::Delimited(..)) => return None,
+            Some(TokenTree::Delimited(..)) => {
+                unreachable!()
+            }
             Some(TokenTree::Token(Token { kind: token::Eq, span }, _)) => {
                 self.inside_delimiters.next();
-                let value = self.value()?;
-                GenericMetaItemParser {
+                let value = self.value();
+                MetaItemParser {
                     path: PathParser::Attr(path),
-                    args: Args::Eq {
-                        eq_span: *span,
-                        value_span: value.span,
-                        value: Cow::Owned(value),
-                    },
+                    args: ArgParser::NameValue(NameValueParser { eq_span: *span, value_span: value.span, value }),
                     dcx: self.dcx,
                 }
             }
-            _ => GenericMetaItemParser {
-                path: PathParser::Attr(path),
-                args: Args::Empty,
-                dcx: self.dcx,
-            },
-        }))
+            _ => MetaItemParser { path: PathParser::Attr(path), args: ArgParser::NoArgs, dcx: self.dcx },
+        })
     }
 
-    pub(crate) fn parse(mut self) -> Option<MetaItemListParser<'a>> {
+    pub(crate) fn parse(mut self, span: Span) -> MetaItemListParser<'a> {
         let mut sub_parsers = Vec::new();
 
         while !self.done() {
-            sub_parsers.push(self.next()?);
+            sub_parsers.push(self.next());
             match self.inside_delimiters.next() {
                 None | Some(TokenTree::Token(Token { kind: token::Comma, .. }, _)) => {}
-                _ => return None,
+                x => {
+                    unreachable!("None returned: {x:?}");
+                }
             }
         }
 
-        Some(MetaItemListParser { sub_parsers })
+        MetaItemListParser { sub_parsers, span }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct MetaItemListParser<'a> {
-    sub_parsers: Vec<MetaItemOrLitParser<'a, MetaItemLit>>,
+    sub_parsers: Vec<MetaItemOrLitParser<'a>>,
+    pub(crate) span: Span,
 }
 
 impl<'a> MetaItemListParser<'a> {
+    fn new(delim: &'a DelimArgs, dcx: DiagCtxtHandle<'a>) -> MetaItemListParser<'a> {
+        MetaItemListParser::new_tts(delim.tokens.iter(), delim.dspan.entire(), dcx)
+    }
+
+    fn new_tts(tts: TokenStreamIter<'a>, span: Span, dcx: DiagCtxtHandle<'a>) -> Self {
+        MetaItemListParserContext {
+            inside_delimiters: tts.clone().peekable(),
+            dcx,
+        }
+        .parse(span)
+    }
+
     /// Lets you pick and choose as what you want to parse each element in the list
-    pub(crate) fn mixed(self) -> impl Iterator<Item = MetaItemOrLitParser<'a, MetaItemLit>> + 'a {
-        self.sub_parsers.into_iter()
+    pub(crate) fn mixed<'s>(&'s self) -> impl Iterator<Item = &'s MetaItemOrLitParser<'a>> + 's {
+        self.sub_parsers.iter()
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -661,23 +562,21 @@ impl<'a> MetaItemListParser<'a> {
     /// Asserts that every item in the list is another list starting with a word.
     ///
     /// See [`MetaItemParser::word`] for examples of words.
-    pub(crate) fn all_word_list(self) -> Option<Vec<(Ident, GenericArgParser<'a, MetaItemLit>)>> {
+    pub(crate) fn all_word_list<'s>(&'s self) -> Option<Vec<(Ident, &'s ArgParser<'a>)>> {
         self.mixed().map(|i| i.meta_item()?.word()).collect()
     }
 
     /// Asserts that every item in the list is another list starting with a full path.
     ///
     /// See [`MetaItemParser::path`] for examples of paths.
-    pub(crate) fn all_path_list(
-        self,
-    ) -> Option<Vec<(PathParser<'a>, GenericArgParser<'a, MetaItemLit>)>> {
+    pub(crate) fn all_path_list<'s>(&'s self) -> Option<Vec<(PathParser<'a>, &'s ArgParser<'a>)>> {
         self.mixed().map(|i| Some(i.meta_item()?.path())).collect()
     }
 
     /// Returns Some if the list contains only a single element.
     ///
     /// Inside the Some is the parser to parse this single element.
-    pub(crate) fn single(self) -> Option<MetaItemOrLitParser<'a, MetaItemLit>> {
+    pub(crate) fn single(&self) -> Option<&MetaItemOrLitParser<'a>> {
         let mut iter = self.mixed();
         iter.next().filter(|_| iter.next().is_none())
     }

@@ -4,10 +4,10 @@ use std::ops::Deref;
 use std::sync::LazyLock;
 
 use rustc_ast::{self as ast, DelimArgs};
+use rustc_attr_data_structures::AttributeKind;
 use rustc_errors::DiagCtxtHandle;
 use rustc_feature::Features;
 use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId};
-use rustc_attr_data_structures::AttributeKind;
 use rustc_session::Session;
 use rustc_span::symbol::kw;
 use rustc_span::{DUMMY_SP, Span, Symbol, sym};
@@ -21,17 +21,17 @@ use crate::attributes::stability::{
 };
 use crate::attributes::transparency::TransparencyGroup;
 use crate::attributes::{AttributeGroup, Combine, Single};
-use crate::parser::{GenericArgParser, GenericMetaItemParser, MetaItemParser};
+use crate::parser::{ArgParser, MetaItemParser};
 
 macro_rules! attribute_groups {
     (
         pub(crate) static $name: ident = [$($names: ty),* $(,)?];
     ) => {
         pub(crate) static $name: LazyLock<(
-            BTreeMap<&'static [Symbol], Vec<Box<dyn Fn(&AttributeAcceptContext<'_>, &GenericArgParser<'_, ast::Expr>) + Send + Sync>>>,
+            BTreeMap<&'static [Symbol], Vec<Box<dyn Fn(&AttributeAcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>,
             Vec<Box<dyn Send + Sync + Fn(&AttributeGroupContext<'_>) -> Option<AttributeKind>>>
         )> = LazyLock::new(|| {
-            let mut accepts = BTreeMap::<_, Vec<Box<dyn Fn(&AttributeAcceptContext<'_>, &GenericArgParser<'_, ast::Expr>) + Send + Sync>>>::new();
+            let mut accepts = BTreeMap::<_, Vec<Box<dyn Fn(&AttributeAcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>::new();
             let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&AttributeGroupContext<'_>) -> Option<AttributeKind>>>::new();
 
             $(
@@ -238,7 +238,7 @@ impl<'sess> AttributeParseContext<'sess> {
                 //     }))
                 // }
                 ast::AttrKind::Normal(n) => {
-                    let parser = GenericMetaItemParser::from_attr(&n, self.dcx());
+                    let parser = MetaItemParser::from_attr(n, self.dcx());
                     let (path, args) = parser.deconstruct();
                     let parts = path.segments().map(|i| i.name).collect::<Vec<_>>();
 

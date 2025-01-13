@@ -1,12 +1,14 @@
 use std::num::NonZero;
 
-use rustc_attr_data_structures::{AllowedThroughUnstableModules, AttributeKind, DefaultBodyStability, PartialConstStability, Stability, StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER};
+use rustc_attr_data_structures::{
+    AllowedThroughUnstableModules, AttributeKind, DefaultBodyStability, PartialConstStability, Stability, StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER
+};
 use rustc_span::{ErrorGuaranteed, Span, Symbol, sym};
 
 use super::util::parse_version;
 use super::{AttributeGroup, AttributeMapping, SingleAttributeGroup};
 use crate::context::{AttributeAcceptContext, AttributeGroupContext};
-use crate::parser::{ArgParser, MetaItemParser, NameValueParser};
+use crate::parser::{ArgParser, MetaItemParser};
 use crate::session_diagnostics::{self, UnsupportedLiteralReason};
 
 #[derive(Default)]
@@ -112,10 +114,7 @@ impl SingleAttributeGroup for ConstStabilityIndirectGroup {
     // ignore
     fn on_duplicate(_cx: &AttributeAcceptContext<'_>, _first_span: Span) {}
 
-    fn convert(
-        _cx: &AttributeAcceptContext<'_>,
-        _args: &super::GenericArgParser<'_, rustc_ast::Expr>,
-    ) -> Option<AttributeKind> {
+    fn convert(_cx: &AttributeAcceptContext<'_>, _args: &ArgParser<'_>) -> Option<AttributeKind> {
         Some(AttributeKind::ConstStabilityIndirect)
     }
 }
@@ -190,9 +189,9 @@ impl AttributeGroup for ConstStabilityGroup {
 ///
 /// Emits an error when either the option was already Some, or the arguments weren't of form
 /// `name = value`
-fn insert_value_into_option_or_error<'a>(
+fn insert_value_into_option_or_error(
     cx: &AttributeAcceptContext<'_>,
-    param: &impl MetaItemParser<'a>,
+    param: &MetaItemParser<'_>,
     item: &mut Option<Symbol>,
 ) -> Option<()> {
     if item.is_some() {
@@ -217,9 +216,9 @@ fn insert_value_into_option_or_error<'a>(
 
 /// Read the content of a `stable`/`rustc_const_stable` attribute, and return the feature name and
 /// its stability information.
-pub(crate) fn parse_stability<'a>(
+pub(crate) fn parse_stability(
     cx: &AttributeAcceptContext<'_>,
-    args: &'a impl ArgParser<'a>,
+    args: &ArgParser<'_>,
 ) -> Option<(Symbol, StabilityLevel)> {
     let mut feature = None;
     let mut since = None;
@@ -283,9 +282,9 @@ pub(crate) fn parse_stability<'a>(
 
 // Read the content of a `unstable`/`rustc_const_unstable`/`rustc_default_body_unstable`
 /// attribute, and return the feature name and its stability information.
-pub(crate) fn parse_unstability<'a>(
+pub(crate) fn parse_unstability(
     cx: &AttributeAcceptContext<'_>,
-    args: &'a impl ArgParser<'a>,
+    args: &ArgParser<'_>,
 ) -> Option<(Symbol, StabilityLevel)> {
     let mut feature = None;
     let mut reason = None;

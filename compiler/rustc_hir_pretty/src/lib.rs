@@ -109,9 +109,7 @@ impl<'a> State<'a> {
                 self.print_attr_item(&unparsed, unparsed.span);
                 self.word("]");
             }
-            hir::Attribute::Parsed(AttributeKind::DocComment {
-                style, kind, comment, ..
-            }) => {
+            hir::Attribute::Parsed(AttributeKind::DocComment { style, kind, comment, .. }) => {
                 self.word(rustc_ast_pretty::pprust::state::doc_comment_to_string(
                     *kind, *style, *comment,
                 ));

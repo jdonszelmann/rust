@@ -2,8 +2,8 @@ use rustc_attr_data_structures::AttributeKind;
 use rustc_span::hygiene::Transparency;
 use rustc_span::sym;
 
-use super::SingleAttributeGroup;
-use crate::parser::{ArgParser, NameValueParser};
+use super::{AttributeAcceptContext, SingleAttributeGroup};
+use crate::parser::ArgParser;
 
 pub(crate) struct TransparencyGroup;
 
@@ -17,10 +17,7 @@ impl SingleAttributeGroup for TransparencyGroup {
         cx.dcx().span_err(vec![first_span, cx.attr_span], "multiple macro transparency attributes");
     }
 
-    fn convert(
-        cx: &crate::context::AttributeAcceptContext<'_>,
-        args: &crate::parser::GenericArgParser<'_, rustc_ast::Expr>,
-    ) -> Option<AttributeKind> {
+    fn convert(cx: &AttributeAcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind> {
         match args.name_value().and_then(|nv| nv.value_as_str()) {
             Some(sym::transparent) => Some(Transparency::Transparent),
             Some(sym::semitransparent) => Some(Transparency::SemiTransparent),

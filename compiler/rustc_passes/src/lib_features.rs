@@ -7,9 +7,9 @@
 use rustc_attr_parsing::{AttributeKind, StabilityLevel, StableSince};
 use rustc_hir::Attribute;
 use rustc_hir::intravisit::Visitor;
+use rustc_middle::hir::nested_filter;
 use rustc_middle::middle::lib_features::{FeatureStability, LibFeatures};
 use rustc_middle::query::{LocalCrate, Providers};
-use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::{Span, Symbol, sym};
 
