@@ -1539,6 +1539,7 @@ impl<'tcx> TyCtxt<'tcx> {
                         max_align = max_align.max(Some(align));
                         ReprFlags::empty()
                     }
+                    attr::ReprEmpty => { /* skip these, they're just for diagnostics */ ReprFlags::empty() }
                 });
             }
         }

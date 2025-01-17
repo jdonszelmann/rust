@@ -175,21 +175,6 @@ LL - #![start]
 LL + #[start]
    |
 
-error: `repr` attribute cannot be used at crate level
-  --> $DIR/issue-43106-gating-of-builtin-attrs-error.rs:19:1
-   |
-LL | #![repr()]
-   | ^^^^^^^^^^
-...
-LL | mod inline {
-   |     ------ the inner attribute doesn't annotate this module
-   |
-help: perhaps you meant to use an outer attribute
-   |
-LL - #![repr()]
-LL + #[repr()]
-   |
-
 error: `path` attribute cannot be used at crate level
   --> $DIR/issue-43106-gating-of-builtin-attrs-error.rs:21:1
    |
@@ -218,6 +203,21 @@ help: perhaps you meant to use an outer attribute
    |
 LL - #![automatically_derived]
 LL + #[automatically_derived]
+   |
+
+error: `repr` attribute cannot be used at crate level
+  --> $DIR/issue-43106-gating-of-builtin-attrs-error.rs:19:1
+   |
+LL | #![repr()]
+   | ^^^^^^^^^^
+...
+LL | mod inline {
+   |     ------ the inner attribute doesn't annotate this module
+   |
+help: perhaps you meant to use an outer attribute
+   |
+LL - #![repr()]
+LL + #[repr()]
    |
 
 error[E0518]: attribute should be applied to function or closure

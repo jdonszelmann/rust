@@ -5,12 +5,12 @@ use std::sync::LazyLock;
 
 use rustc_ast::{self as ast, DelimArgs};
 use rustc_attr_data_structures::AttributeKind;
-use rustc_errors::DiagCtxtHandle;
+use rustc_errors::{DiagCtxtHandle, Diagnostic};
 use rustc_feature::Features;
 use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId};
 use rustc_session::Session;
 use rustc_span::symbol::kw;
-use rustc_span::{DUMMY_SP, Span, Symbol, sym};
+use rustc_span::{sym, ErrorGuaranteed, Span, Symbol, DUMMY_SP};
 
 use crate::attributes::allow_unstable::{AllowConstFnUnstableGroup, AllowInternalUnstableGroup};
 use crate::attributes::confusables::ConfusablesGroup;
@@ -93,6 +93,16 @@ pub(crate) struct AttributeAcceptContext<'a> {
     pub(crate) attr_span: Span,
 }
 
+impl<'a> AttributeAcceptContext<'a> {
+    pub(crate) fn emit_err(&self, diag: impl Diagnostic<'a>) -> ErrorGuaranteed {
+        if !self.limit_diagnostics {
+            self.dcx().emit_err(diag)
+        } else {
+            self.dcx().span_delayed_bug(self.attr_span, "diagnostic limited during attribute parsing")
+        }
+    }
+}
+
 impl<'a> Deref for AttributeAcceptContext<'a> {
     type Target = AttributeGroupContext<'a>;
 
@@ -138,6 +148,10 @@ pub struct AttributeParseContext<'sess> {
     /// Used in cases where we want the lowering infrastructure for
     /// parse just a single attribute.
     parse_only: Option<Symbol>,
+
+    /// Can be used to instruct parsers to reduce the number of diagnostics it emits.
+    /// Useful when using `parse_limited` and you know the attr will be reparsed later.
+    pub(crate) limit_diagnostics: bool,
 }
 
 impl<'sess> AttributeParseContext<'sess> {
@@ -156,8 +170,9 @@ impl<'sess> AttributeParseContext<'sess> {
         attrs: &[ast::Attribute],
         sym: Symbol,
         target_span: Span,
+        limit_diagnostics: bool,
     ) -> Option<Attribute> {
-        let mut parsed = Self { sess, features: None, tools: Vec::new(), parse_only: Some(sym) }
+        let mut parsed = Self { sess, features: None, tools: Vec::new(), parse_only: Some(sym), limit_diagnostics }
             .parse_attribute_list(attrs, target_span, OmitDoc::Skip);
 
         assert!(parsed.len() <= 1);
@@ -166,7 +181,7 @@ impl<'sess> AttributeParseContext<'sess> {
     }
 
     pub fn new(sess: &'sess Session, features: &'sess Features, tools: Vec<Symbol>) -> Self {
-        Self { sess, features: Some(features), tools, parse_only: None }
+        Self { sess, features: Some(features), tools, parse_only: None, limit_diagnostics: false }
     }
 
     pub(crate) fn sess(&self) -> &'sess Session {

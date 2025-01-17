@@ -850,7 +850,9 @@ impl SyntaxExtension {
             find_attr!(attrs, AttributeKind::AllowInternalUnstable(i) => i)
                 .map(|i| i.as_slice())
                 .unwrap_or_default();
-        let allow_internal_unsafe = find_attr!(attrs, AttributeKind::AllowInternalUnsafe);
+        // FIXME(jdonszelman): allow_internal_unsafe isn't yet new-style
+        // let allow_internal_unsafe = find_attr!(attrs, AttributeKind::AllowInternalUnsafe);
+        let allow_internal_unsafe = ast::attr::find_by_name(attrs, sym::allow_internal_unsafe).is_some();
 
         let local_inner_macros = ast::attr::find_by_name(attrs, sym::macro_export)
             .and_then(|macro_export| macro_export.meta_item_list())
@@ -890,7 +892,7 @@ impl SyntaxExtension {
             span,
             allow_internal_unstable: (!allow_internal_unstable.is_empty())
                 // FIXME(jdonszelmann): avoid the into_iter/collect?
-                .then(|| allow_internal_unstable.iter().copied().collect::<Vec<_>>().into()),
+                .then(|| allow_internal_unstable.iter().map(|i| i.0).collect::<Vec<_>>().into()),
             stability,
             deprecation: find_attr!(attrs, AttributeKind::Deprecation{deprecation, ..} => *deprecation),
             helper_attrs,

@@ -1,5 +1,7 @@
+use std::iter;
+
 use rustc_attr_data_structures::AttributeKind;
-use rustc_span::{Symbol, sym};
+use rustc_span::{sym, Span, Symbol};
 
 use super::{CombineAttributeGroup, ConvertFn};
 use crate::context::AttributeAcceptContext;
@@ -9,14 +11,14 @@ use crate::session_diagnostics;
 pub(crate) struct AllowInternalUnstableGroup;
 impl CombineAttributeGroup for AllowInternalUnstableGroup {
     const PATH: &'static [rustc_span::Symbol] = &[sym::allow_internal_unstable];
-    type Item = Symbol;
+    type Item = (Symbol, Span);
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::AllowInternalUnstable;
 
     fn extend<'a>(
         cx: &'a AttributeAcceptContext<'a>,
         args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
-        parse_unstable(cx, args, Self::PATH[0])
+        parse_unstable(cx, args, Self::PATH[0]).into_iter().zip(iter::repeat(cx.attr_span))
     }
 }
 
@@ -42,7 +44,7 @@ fn parse_unstable<'a>(
     let mut res = Vec::new();
 
     let Some(list) = args.list() else {
-        cx.dcx().emit_err(session_diagnostics::ExpectsFeatureList {
+        cx.emit_err(session_diagnostics::ExpectsFeatureList {
             span: cx.attr_span,
             name: symbol.to_ident_string(),
         });
@@ -54,7 +56,7 @@ fn parse_unstable<'a>(
         if let Some(ident) = param.meta_item().and_then(|i| i.word_without_args()) {
             res.push(ident.name);
         } else {
-            cx.dcx().emit_err(session_diagnostics::ExpectsFeatures {
+            cx.emit_err(session_diagnostics::ExpectsFeatures {
                 span: param_span,
                 name: symbol.to_ident_string(),
             });

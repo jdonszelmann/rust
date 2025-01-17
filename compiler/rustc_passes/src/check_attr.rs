@@ -5,7 +5,6 @@
 //! conflicts between multiple such attributes attached to the same
 //! item.
 
-use core::slice::SlicePattern;
 use std::cell::Cell;
 use std::collections::hash_map::Entry;
 
@@ -122,6 +121,15 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 Attribute::Parsed(AttributeKind::Confusables { first_span, .. }) => {
                     self.check_confusables(*first_span, target);
                 }
+                Attribute::Parsed(
+                    AttributeKind::Stability { span, .. }
+                    | AttributeKind::ConstStability { span, .. }
+                ) => {
+                    self.check_stability_promotable(*span, target)
+                }
+                Attribute::Parsed(AttributeKind::AllowInternalUnstable(syms)) => {
+                    self.check_allow_internal_unstable(hir_id, syms.first().unwrap().1, span, target, attrs)
+                }
                 _ => {
                     match attr.path().as_slice() {
                         [sym::diagnostic, sym::do_not_recommend, ..] => {
@@ -157,9 +165,6 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         [sym::rustc_layout_scalar_valid_range_start, ..]
                         | [sym::rustc_layout_scalar_valid_range_end, ..] => {
                             self.check_rustc_layout_scalar_valid_range(attr, span, target)
-                        }
-                        [sym::allow_internal_unstable, ..] => {
-                            self.check_allow_internal_unstable(hir_id, attr, span, target, attrs)
                         }
                         [sym::debugger_visualizer, ..] => self.check_debugger_visualizer(attr, target),
                         [sym::rustc_allow_const_fn_unstable, ..] => {
@@ -213,12 +218,6 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         }
                         [sym::ffi_pure, ..] => self.check_ffi_pure(attr.span(), attrs, target),
                         [sym::ffi_const, ..] => self.check_ffi_const(attr.span(), target),
-                        [sym::rustc_const_unstable, ..]
-                        | [sym::rustc_const_stable, ..]
-                        | [sym::unstable, ..]
-                        | [sym::stable, ..]
-                        | [sym::rustc_allowed_through_unstable_modules, ..]
-                        | [sym::rustc_promotable, ..] => self.check_stability_promotable(attr, target),
                         [sym::link_ordinal, ..] => self.check_link_ordinal(attr, span, target),
                         [sym::cold, ..] => self.check_cold(hir_id, attr, span, target),
                         [sym::link, ..] => self.check_link(hir_id, attr, span, target),
@@ -357,8 +356,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         );
     }
 
-    fn inline_attr_str_error_without_macro_def(&self, hir_id: HirId, attr: &Attribute, sym: &str) {
-        self.tcx.emit_node_span_lint(UNUSED_ATTRIBUTES, hir_id, attr.span(), errors::IgnoredAttr {
+    fn inline_attr_str_error_without_macro_def(&self, hir_id: HirId, attr_span: Span, sym: &str) {
+        self.tcx.emit_node_span_lint(UNUSED_ATTRIBUTES, hir_id, attr_span, errors::IgnoredAttr {
             sym,
         });
     }
@@ -1966,7 +1965,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         }
                     }
                 }
-                ReprAttr::ReprInt(i) => {
+                ReprAttr::ReprInt(_) => {
                     int_reprs += 1;
                     if target != Target::Enum {
                         self.dcx().emit_err(errors::AttrApplication::Enum {
@@ -1977,6 +1976,9 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         continue;
                     }
                 }
+                // FIXME(jdonszelmann): move the diagnostic for unused repr attrs here, I think
+                // it's a better place for it.
+                ReprAttr::ReprEmpty => { /* skip these, they're just for (other) diagnostics */ continue; }
             };
         }
 
@@ -2076,41 +2078,46 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
 
     /// Outputs an error for `#[allow_internal_unstable]` which can only be applied to macros.
     /// (Allows proc_macro functions)
+    // FIXME(jdonszelmann): if possible, move to attr parsing
     fn check_allow_internal_unstable(
         &self,
         hir_id: HirId,
-        attr: &Attribute,
+        attr_span: Span,
         span: Span,
         target: Target,
         attrs: &[Attribute],
     ) {
-        debug!("Checking target: {:?}", target);
         match target {
             Target::Fn => {
                 for attr in attrs {
                     if attr.is_proc_macro_attr() {
-                        debug!("Is proc macro attr");
+                        // return on proc macros
                         return;
                     }
                 }
-                debug!("Is not proc macro attr");
+                // continue out of the match
             }
-            Target::MacroDef => {}
+            // return on decl macros
+            Target::MacroDef => return,
             // FIXME(#80564): We permit struct fields and match arms to have an
             // `#[allow_internal_unstable]` attribute with just a lint, because we previously
             // erroneously allowed it and some crates used it accidentally, to be compatible
             // with crates depending on them, we can't throw an error here.
-            Target::Field | Target::Arm => self.inline_attr_str_error_without_macro_def(
-                hir_id,
-                attr,
-                "allow_internal_unstable",
-            ),
-            _ => {
-                self.tcx
-                    .dcx()
-                    .emit_err(errors::AllowInternalUnstable { attr_span: attr.span(), span });
+            Target::Field | Target::Arm => {
+                self.inline_attr_str_error_without_macro_def(
+                    hir_id,
+                    attr_span,
+                    "allow_internal_unstable",
+                );
+                return;
             }
+            // otherwise continue out of the match
+            _ => {}
         }
+
+        self.tcx
+            .dcx()
+            .emit_err(errors::AllowInternalUnstable { attr_span, span });
     }
 
     /// Checks if the items on the `#[debugger_visualizer]` attribute are valid.
@@ -2165,10 +2172,10 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         }
     }
 
-    fn check_stability_promotable(&self, attr: &Attribute, target: Target) {
+    fn check_stability_promotable(&self, span: Span, target: Target) {
         match target {
             Target::Expression => {
-                self.dcx().emit_err(errors::StabilityPromotable { attr_span: attr.span() });
+                self.dcx().emit_err(errors::StabilityPromotable { attr_span: span });
             }
             _ => {}
         }
@@ -2261,19 +2268,39 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     }
 
     fn check_unused_attribute(&self, hir_id: HirId, attr: &Attribute) {
+        // FIXME(jdonszelmann): deduplicate these checks after more attrs are parsed. This is very
+        // ugly now but can 100% be removed later.
+        if let Attribute::Parsed(p) = attr {
+            match p {
+                AttributeKind::Repr(reprs) => {
+                    for (r, span) in reprs {
+                        if let ReprAttr::ReprEmpty = r {
+                            self.tcx.emit_node_span_lint(UNUSED_ATTRIBUTES, hir_id, *span, errors::Unused {
+                                attr_span: *span,
+                                note: errors::UnusedNote::EmptyList { name: sym::repr },
+                            });
+                        }
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         // Warn on useless empty attributes.
-        let note = if matches!(
-            attr.name_or_empty(),
-            sym::macro_use
-                | sym::allow
-                | sym::expect
-                | sym::warn
-                | sym::deny
-                | sym::forbid
-                | sym::feature
-                | sym::repr
-                | sym::target_feature
-        ) && attr.meta_item_list().is_some_and(|list| list.is_empty())
+        let note = if (
+            matches!(
+                attr.name_or_empty(),
+                sym::macro_use
+                    | sym::allow
+                    | sym::expect
+                    | sym::warn
+                    | sym::deny
+                    | sym::forbid
+                    | sym::feature
+                    | sym::target_feature
+            )
+         && attr.meta_item_list().is_some_and(|list| list.is_empty()))
         {
             errors::UnusedNote::EmptyList { name: attr.name_or_empty() }
         } else if matches!(
@@ -2606,7 +2633,6 @@ fn check_invalid_crate_level_attr(tcx: TyCtxt<'_>, attrs: &[Attribute]) {
     // resolution for the attribute macro error.
     const ATTRS_TO_CHECK: &[Symbol] = &[
         sym::macro_export,
-        sym::repr,
         sym::path,
         sym::automatically_derived,
         sym::start,
@@ -2619,44 +2645,49 @@ fn check_invalid_crate_level_attr(tcx: TyCtxt<'_>, attrs: &[Attribute]) {
     ];
 
     for attr in attrs {
-        for attr_to_check in ATTRS_TO_CHECK {
-            if attr.has_name(*attr_to_check) {
-                let item = tcx
-                    .hir()
-                    .items()
-                    .map(|id| tcx.hir().item(id))
-                    .find(|item| !item.span.is_dummy()) // Skip prelude `use`s
-                    .map(|item| errors::ItemFollowingInnerAttr {
-                        span: item.ident.span,
-                        kind: item.kind.descr(),
-                    });
-                let err = tcx.dcx().create_err(errors::InvalidAttrAtCrateLevel {
-                    span: attr.span(),
-                    sugg_span: tcx
-                        .sess
-                        .source_map()
-                        .span_to_snippet(attr.span())
-                        .ok()
-                        .filter(|src| src.starts_with("#!["))
-                        .map(|_| {
-                            attr.span()
-                                .with_lo(attr.span().lo() + BytePos(1))
-                                .with_hi(attr.span().lo() + BytePos(2))
-                        }),
-                    name: *attr_to_check,
-                    item,
-                });
+        // FIXME(jdonszelmann): all attrs should be combined here cleaning this up some day.
+        let (span, name) = if let Some(a) = ATTRS_TO_CHECK.iter().find(|attr_to_check| attr.has_name(**attr_to_check)) {
+            (attr.span(), *a)
+        } else if let Attribute::Parsed(AttributeKind::Repr(r)) = attr {
+            (r.first().unwrap().1, sym::repr)
+        } else {
+            continue;
+        };
 
-                if let Attribute::Unparsed(ref p) = attr {
-                    tcx.dcx().try_steal_replace_and_emit_err(
-                        p.path.span,
-                        StashKey::UndeterminedMacroResolution,
-                        err,
-                    );
-                } else {
-                    err.emit();
-                }
-            }
+        let item = tcx
+            .hir()
+            .items()
+            .map(|id| tcx.hir().item(id))
+            .find(|item| !item.span.is_dummy()) // Skip prelude `use`s
+            .map(|item| errors::ItemFollowingInnerAttr {
+                span: item.ident.span,
+                kind: item.kind.descr(),
+            });
+        let err = tcx.dcx().create_err(errors::InvalidAttrAtCrateLevel {
+            span,
+            sugg_span: tcx
+                .sess
+                .source_map()
+                .span_to_snippet(span)
+                .ok()
+                .filter(|src| src.starts_with("#!["))
+                .map(|_| {
+                   span
+                        .with_lo(span.lo() + BytePos(1))
+                        .with_hi(span.lo() + BytePos(2))
+                }),
+            name,
+            item,
+        });
+
+        if let Attribute::Unparsed(ref p) = attr {
+            tcx.dcx().try_steal_replace_and_emit_err(
+                p.path.span,
+                StashKey::UndeterminedMacroResolution,
+                err,
+            );
+        } else {
+            err.emit();
         }
     }
 }

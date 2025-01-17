@@ -19,7 +19,7 @@ fn get(
     item: &mut Option<Symbol>,
 ) -> bool {
     if item.is_some() {
-        cx.dcx().emit_err(session_diagnostics::MultipleItem {
+        cx.emit_err(session_diagnostics::MultipleItem {
             span: param_span,
             item: ident.to_string(),
         });
@@ -31,7 +31,7 @@ fn get(
             true
         } else {
             let lit = v.value_as_lit();
-            cx.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
+            cx.emit_err(session_diagnostics::UnsupportedLiteral {
                 span: v.value_span,
                 reason: UnsupportedLiteralReason::DeprecatedString,
                 is_bytestr: lit.kind.is_bytestr(),
@@ -41,7 +41,7 @@ fn get(
         }
     } else {
         // FIXME(jdonszelmann): suggestion?
-        cx.dcx().emit_err(session_diagnostics::IncorrectMetaItem {
+        cx.emit_err(session_diagnostics::IncorrectMetaItem {
             span: param_span,
             suggestion: None,
         });
@@ -54,7 +54,7 @@ impl SingleAttributeGroup for DeprecationGroup {
 
     fn on_duplicate(cx: &AttributeAcceptContext<'_>, first_span: rustc_span::Span) {
         // FIXME(jdonszelmann): merge with errors from check_attrs.rs
-        cx.dcx().emit_err(session_diagnostics::UnusedMultiple {
+        cx.emit_err(session_diagnostics::UnusedMultiple {
             this: cx.attr_span,
             other: first_span,
             name: sym::deprecated,
@@ -78,7 +78,7 @@ impl SingleAttributeGroup for DeprecationGroup {
             for param in list.mixed() {
                 let param_span = param.span();
                 let Some(param) = param.meta_item() else {
-                    cx.dcx().emit_err(session_diagnostics::UnsupportedLiteral {
+                    cx.emit_err(session_diagnostics::UnsupportedLiteral {
                         span: param_span,
                         reason: UnsupportedLiteralReason::DeprecatedKvPair,
                         is_bytestr: false,
@@ -102,7 +102,7 @@ impl SingleAttributeGroup for DeprecationGroup {
                     }
                     sym::suggestion => {
                         if !features.deprecated_suggestion() {
-                            cx.dcx().emit_err(session_diagnostics::DeprecatedItemSuggestion {
+                            cx.emit_err(session_diagnostics::DeprecatedItemSuggestion {
                                 span: param_span,
                                 is_nightly: cx.sess().is_nightly_build(),
                                 details: (),
@@ -114,7 +114,7 @@ impl SingleAttributeGroup for DeprecationGroup {
                         }
                     }
                     _ => {
-                        cx.dcx().emit_err(session_diagnostics::UnknownMetaItem {
+                        cx.emit_err(session_diagnostics::UnknownMetaItem {
                             span: param_span,
                             item: ident.to_string(),
                             expected: if features.deprecated_suggestion() {
@@ -137,18 +137,18 @@ impl SingleAttributeGroup for DeprecationGroup {
             } else if let Some(version) = parse_version(since) {
                 DeprecatedSince::RustcVersion(version)
             } else {
-                cx.dcx().emit_err(session_diagnostics::InvalidSince { span: cx.attr_span });
+                cx.emit_err(session_diagnostics::InvalidSince { span: cx.attr_span });
                 DeprecatedSince::Err
             }
         } else if is_rustc {
-            cx.dcx().emit_err(session_diagnostics::MissingSince { span: cx.attr_span });
+            cx.emit_err(session_diagnostics::MissingSince { span: cx.attr_span });
             DeprecatedSince::Err
         } else {
             DeprecatedSince::Unspecified
         };
 
         if is_rustc && note.is_none() {
-            cx.dcx().emit_err(session_diagnostics::MissingNote { span: cx.attr_span });
+            cx.emit_err(session_diagnostics::MissingNote { span: cx.attr_span });
             return None;
         }
 

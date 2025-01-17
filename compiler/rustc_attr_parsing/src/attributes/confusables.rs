@@ -24,14 +24,14 @@ impl AttributeGroup for ConfusablesGroup {
         };
 
         if list.is_empty() {
-            cx.dcx().emit_err(session_diagnostics::EmptyConfusables { span: cx.attr_span });
+            cx.emit_err(session_diagnostics::EmptyConfusables { span: cx.attr_span });
         }
 
         for param in list.mixed() {
             let span = param.span();
 
             let Some(lit) = param.lit() else {
-                cx.dcx().emit_err(session_diagnostics::IncorrectMetaItem {
+                cx.emit_err(session_diagnostics::IncorrectMetaItem {
                     span,
                     suggestion: Some(session_diagnostics::IncorrectMetaItemSuggestion {
                         lo: span.shrink_to_lo(),

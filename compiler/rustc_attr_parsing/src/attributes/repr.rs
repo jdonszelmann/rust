@@ -34,7 +34,19 @@ impl CombineAttributeGroup for ReprGroup {
             return reprs;
         };
 
+        if list.is_empty() {
+            // this is so validation can emit a lint
+            reprs.push((ReprAttr::ReprEmpty, cx.attr_span));
+        }
+
         for param in list.mixed() {
+            if let Some(_) = param.lit() {
+                cx.emit_err(session_diagnostics::ReprIdent {
+                    span: cx.attr_span,
+                });
+                continue;
+            }
+
             let span = param.span();
             reprs.extend(param.meta_item().and_then(|mi| parse_repr(cx, &mi)).map(|r| (r, span)));
         }
@@ -93,7 +105,7 @@ fn parse_repr(
 
     match (ident.name, args) {
         (sym::align, ArgParser::NoArgs) =>  {
-            cx.dcx().emit_err(session_diagnostics::InvalidReprAlignNeedArg { span: ident.span });
+            cx.emit_err(session_diagnostics::InvalidReprAlignNeedArg { span: ident.span });
             None
         }
         (sym::align, ArgParser::List(l)) => parse_repr_align(cx, l, param.span(), AlignKind::Align),
@@ -102,7 +114,7 @@ fn parse_repr(
         (sym::packed, ArgParser::List(l)) => parse_repr_align(cx, l, param.span(), AlignKind::Packed),
 
         (sym::align | sym::packed, ArgParser::NameValue(l)) =>  {
-            cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatGeneric {
+            cx.emit_err(session_diagnostics::IncorrectReprFormatGeneric {
                 span: param.span(),
                 // FIXME(jdonszelmann) can just be a string in the diag type
                 repr_arg: &ident.to_string(),
@@ -133,14 +145,14 @@ fn parse_repr(
         }
 
         (sym::Rust | sym::C | sym::simd | sym::transparent | int_pat!(), ArgParser::NameValue(_)) => {
-            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoValue {
+            cx.emit_err(session_diagnostics::InvalidReprHintNoValue {
                 span: param.span(),
                 name: ident.to_string(),
             });
             None
         }
         (sym::Rust | sym::C | sym::simd | sym::transparent | int_pat!(), ArgParser::List(_)) => {
-            cx.dcx().emit_err(session_diagnostics::InvalidReprHintNoParen {
+            cx.emit_err(session_diagnostics::InvalidReprHintNoParen {
                 span: param.span(),
                 name: ident.to_string(),
             });
@@ -148,7 +160,7 @@ fn parse_repr(
         }
 
         _ => {
-            cx.dcx().emit_err(session_diagnostics::UnrecognizedReprHint { span: param.span() });
+            cx.emit_err(session_diagnostics::UnrecognizedReprHint { span: param.span() });
             None
         }
     }
@@ -165,7 +177,7 @@ fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'
     let Some(align) = list.single() else {
         match align_kind {
             Packed => {
-                cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatPackedOneOrZeroArg {
+                cx.emit_err(session_diagnostics::IncorrectReprFormatPackedOneOrZeroArg {
                     span: param_span,
                 });
             },
@@ -181,12 +193,12 @@ fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'
     let Some(lit) = align.lit() else {
         match align_kind {
             Packed => {
-                cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatPackedExpectInteger {
+                cx.emit_err(session_diagnostics::IncorrectReprFormatPackedExpectInteger {
                     span: align.span(),
                 });
             },
             Align => {
-                cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatExpectInteger {
+                cx.emit_err(session_diagnostics::IncorrectReprFormatExpectInteger {
                     span: align.span(),
                 });
             }
@@ -201,7 +213,7 @@ fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'
             AlignKind::Align => ReprAttr::ReprAlign(literal),
         }),
         Err(message) => {
-            cx.dcx().emit_err(session_diagnostics::InvalidReprGeneric {
+            cx.emit_err(session_diagnostics::InvalidReprGeneric {
                 span: lit.span,
                 repr_arg: match align_kind {
                     Packed => "packed".to_string(),

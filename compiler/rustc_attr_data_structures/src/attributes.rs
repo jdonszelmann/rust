@@ -62,6 +62,8 @@ pub enum ReprAttr {
     ReprSimd,
     ReprTransparent,
     ReprAlign(Align),
+    // this one is just so we can emit a lint for it
+    ReprEmpty,
 }
 pub use ReprAttr::*;
 
@@ -147,7 +149,7 @@ pub enum AttributeKind {
     Allow,
     AllowConstFnUnstable(ThinVec<Symbol>),
     AllowInternalUnsafe,
-    AllowInternalUnstable(ThinVec<Symbol>),
+    AllowInternalUnstable(ThinVec<(Symbol, Span)>),
     AutoDiff,
     AutomaticallyDerived,
     BodyStability {

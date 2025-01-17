@@ -831,7 +831,7 @@ impl<'a> MixedExportNameAndNoMangleState<'a> {
             export_name: Some(export_name),
             no_mangle: Some(no_mangle),
             hir_id: Some(hir_id),
-            no_mangle_attr: Some(no_mangle_attr),
+            no_mangle_attr: Some(_),
         } = self
         {
             tcx.emit_node_span_lint(
@@ -840,7 +840,7 @@ impl<'a> MixedExportNameAndNoMangleState<'a> {
                 no_mangle,
                 errors::MixedExportNameAndNoMangle {
                     no_mangle,
-                    no_mangle_attr: rustc_hir_pretty::attribute_to_string(&tcx, no_mangle_attr),
+                    no_mangle_attr: "#[unsafe(no_mangle)]".to_string(),
                     export_name,
                     removal_span: no_mangle,
                 },

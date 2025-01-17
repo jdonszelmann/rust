@@ -288,7 +288,7 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
         // Stable *language* features shouldn't be used as unstable library features.
         // (Not doing this for stable library features is checked by tidy.)
         if let Some((
-            PartialConstStability { level: StabilityLevel::Stable { .. }, feature, .. },
+            PartialConstStability { level: StabilityLevel::Unstable { .. }, feature, .. },
             const_span,
         )) = const_stab
         {
