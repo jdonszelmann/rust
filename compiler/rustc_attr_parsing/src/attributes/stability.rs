@@ -1,7 +1,8 @@
 use std::num::NonZero;
 
 use rustc_attr_data_structures::{
-    AllowedThroughUnstableModules, AttributeKind, DefaultBodyStability, PartialConstStability, Stability, StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER
+    AllowedThroughUnstableModules, AttributeKind, DefaultBodyStability, PartialConstStability,
+    Stability, StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER,
 };
 use rustc_span::{ErrorGuaranteed, Span, Symbol, sym};
 
@@ -16,7 +17,7 @@ macro_rules! reject_outside_std {
         // Emit errors for non-staged-api crates.
         if !$cx.features().staged_api() {
             $cx.emit_err(session_diagnostics::StabilityOutsideStd { span: $cx.attr_span });
-            return
+            return;
         }
     };
 }
@@ -59,16 +60,24 @@ impl AttributeGroup for StabilityGroup {
         }),
         (&[sym::rustc_allowed_through_unstable_modules], |this, cx, args| {
             reject_outside_std!(cx);
-            this.allowed_through_unstable_modules = Some(match args.name_value().and_then(|i| i.value_as_str()) {
-                Some(msg) => AllowedThroughUnstableModules::WithDeprecation(msg),
-                None => AllowedThroughUnstableModules::WithoutDeprecation,
-            });
+            this.allowed_through_unstable_modules =
+                Some(match args.name_value().and_then(|i| i.value_as_str()) {
+                    Some(msg) => AllowedThroughUnstableModules::WithDeprecation(msg),
+                    None => AllowedThroughUnstableModules::WithoutDeprecation,
+                });
         }),
     ];
 
     fn finalize(mut self, cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
         if let Some(atum) = self.allowed_through_unstable_modules {
-            if let Some((Stability{level: StabilityLevel::Stable { ref mut allowed_through_unstable_modules, .. }, ..}, _)) = self.stability {
+            if let Some((
+                Stability {
+                    level: StabilityLevel::Stable { ref mut allowed_through_unstable_modules, .. },
+                    ..
+                },
+                _,
+            )) = self.stability
+            {
                 *allowed_through_unstable_modules = Some(atum);
             } else {
                 cx.dcx().emit_err(session_diagnostics::RustcAllowedUnstablePairing {
@@ -358,8 +367,8 @@ pub(crate) fn parse_unstability(
         None => Err(cx.emit_err(session_diagnostics::MissingFeature { span: cx.attr_span })),
     };
 
-    let issue = issue
-        .ok_or_else(|| cx.emit_err(session_diagnostics::MissingIssue { span: cx.attr_span }));
+    let issue =
+        issue.ok_or_else(|| cx.emit_err(session_diagnostics::MissingIssue { span: cx.attr_span }));
 
     match (feature, issue) {
         (Ok(feature), Ok(_)) => {

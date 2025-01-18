@@ -41,10 +41,7 @@ fn get(
         }
     } else {
         // FIXME(jdonszelmann): suggestion?
-        cx.emit_err(session_diagnostics::IncorrectMetaItem {
-            span: param_span,
-            suggestion: None,
-        });
+        cx.emit_err(session_diagnostics::IncorrectMetaItem { span: param_span, suggestion: None });
         false
     }
 }

@@ -10,7 +10,7 @@ use rustc_feature::Features;
 use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId};
 use rustc_session::Session;
 use rustc_span::symbol::kw;
-use rustc_span::{sym, ErrorGuaranteed, Span, Symbol, DUMMY_SP};
+use rustc_span::{DUMMY_SP, ErrorGuaranteed, Span, Symbol, sym};
 
 use crate::attributes::allow_unstable::{AllowConstFnUnstableGroup, AllowInternalUnstableGroup};
 use crate::attributes::confusables::ConfusablesGroup;
@@ -98,7 +98,8 @@ impl<'a> AttributeAcceptContext<'a> {
         if !self.limit_diagnostics {
             self.dcx().emit_err(diag)
         } else {
-            self.dcx().span_delayed_bug(self.attr_span, "diagnostic limited during attribute parsing")
+            self.dcx()
+                .span_delayed_bug(self.attr_span, "diagnostic limited during attribute parsing")
         }
     }
 }
@@ -172,8 +173,14 @@ impl<'sess> AttributeParseContext<'sess> {
         target_span: Span,
         limit_diagnostics: bool,
     ) -> Option<Attribute> {
-        let mut parsed = Self { sess, features: None, tools: Vec::new(), parse_only: Some(sym), limit_diagnostics }
-            .parse_attribute_list(attrs, target_span, OmitDoc::Skip);
+        let mut parsed = Self {
+            sess,
+            features: None,
+            tools: Vec::new(),
+            parse_only: Some(sym),
+            limit_diagnostics,
+        }
+        .parse_attribute_list(attrs, target_span, OmitDoc::Skip);
 
         assert!(parsed.len() <= 1);
 

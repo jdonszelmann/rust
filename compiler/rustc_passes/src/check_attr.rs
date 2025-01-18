@@ -117,19 +117,22 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         let mut seen = FxHashMap::default();
         let attrs = self.tcx.hir().attrs(hir_id);
         for attr in attrs {
-           match attr {
+            match attr {
                 Attribute::Parsed(AttributeKind::Confusables { first_span, .. }) => {
                     self.check_confusables(*first_span, target);
                 }
                 Attribute::Parsed(
                     AttributeKind::Stability { span, .. }
-                    | AttributeKind::ConstStability { span, .. }
-                ) => {
-                    self.check_stability_promotable(*span, target)
-                }
-                Attribute::Parsed(AttributeKind::AllowInternalUnstable(syms)) => {
-                    self.check_allow_internal_unstable(hir_id, syms.first().unwrap().1, span, target, attrs)
-                }
+                    | AttributeKind::ConstStability { span, .. },
+                ) => self.check_stability_promotable(*span, target),
+                Attribute::Parsed(AttributeKind::AllowInternalUnstable(syms)) => self
+                    .check_allow_internal_unstable(
+                        hir_id,
+                        syms.first().unwrap().1,
+                        span,
+                        target,
+                        attrs,
+                    ),
                 _ => {
                     match attr.path().as_slice() {
                         [sym::diagnostic, sym::do_not_recommend, ..] => {
@@ -357,9 +360,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     }
 
     fn inline_attr_str_error_without_macro_def(&self, hir_id: HirId, attr_span: Span, sym: &str) {
-        self.tcx.emit_node_span_lint(UNUSED_ATTRIBUTES, hir_id, attr_span, errors::IgnoredAttr {
-            sym,
-        });
+        self.tcx
+            .emit_node_span_lint(UNUSED_ATTRIBUTES, hir_id, attr_span, errors::IgnoredAttr { sym });
     }
 
     /// Checks if `#[diagnostic::do_not_recommend]` is applied on a trait impl.
@@ -1932,7 +1934,6 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     self.check_align_value(*align, *repr_span);
                 }
                 ReprAttr::ReprPacked(_) => {
-                    // TODO: shouldn't we check the align here too?
                     if target != Target::Struct && target != Target::Union {
                         self.dcx().emit_err(errors::AttrApplication::StructUnion {
                             hint_span: *repr_span,
@@ -1978,7 +1979,10 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 }
                 // FIXME(jdonszelmann): move the diagnostic for unused repr attrs here, I think
                 // it's a better place for it.
-                ReprAttr::ReprEmpty => { /* skip these, they're just for (other) diagnostics */ continue; }
+                ReprAttr::ReprEmpty => {
+                    /* skip these, they're just for (other) diagnostics */
+                    continue;
+                }
             };
         }
 
@@ -2115,9 +2119,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             _ => {}
         }
 
-        self.tcx
-            .dcx()
-            .emit_err(errors::AllowInternalUnstable { attr_span, span });
+        self.tcx.dcx().emit_err(errors::AllowInternalUnstable { attr_span, span });
     }
 
     /// Checks if the items on the `#[debugger_visualizer]` attribute are valid.
@@ -2275,10 +2277,15 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 AttributeKind::Repr(reprs) => {
                     for (r, span) in reprs {
                         if let ReprAttr::ReprEmpty = r {
-                            self.tcx.emit_node_span_lint(UNUSED_ATTRIBUTES, hir_id, *span, errors::Unused {
-                                attr_span: *span,
-                                note: errors::UnusedNote::EmptyList { name: sym::repr },
-                            });
+                            self.tcx.emit_node_span_lint(
+                                UNUSED_ATTRIBUTES,
+                                hir_id,
+                                *span,
+                                errors::Unused {
+                                    attr_span: *span,
+                                    note: errors::UnusedNote::EmptyList { name: sym::repr },
+                                },
+                            );
                         }
                     }
                     return;
@@ -2288,19 +2295,17 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         }
 
         // Warn on useless empty attributes.
-        let note = if (
-            matches!(
-                attr.name_or_empty(),
-                sym::macro_use
-                    | sym::allow
-                    | sym::expect
-                    | sym::warn
-                    | sym::deny
-                    | sym::forbid
-                    | sym::feature
-                    | sym::target_feature
-            )
-         && attr.meta_item_list().is_some_and(|list| list.is_empty()))
+        let note = if (matches!(
+            attr.name_or_empty(),
+            sym::macro_use
+                | sym::allow
+                | sym::expect
+                | sym::warn
+                | sym::deny
+                | sym::forbid
+                | sym::feature
+                | sym::target_feature
+        ) && attr.meta_item_list().is_some_and(|list| list.is_empty()))
         {
             errors::UnusedNote::EmptyList { name: attr.name_or_empty() }
         } else if matches!(
@@ -2646,7 +2651,9 @@ fn check_invalid_crate_level_attr(tcx: TyCtxt<'_>, attrs: &[Attribute]) {
 
     for attr in attrs {
         // FIXME(jdonszelmann): all attrs should be combined here cleaning this up some day.
-        let (span, name) = if let Some(a) = ATTRS_TO_CHECK.iter().find(|attr_to_check| attr.has_name(**attr_to_check)) {
+        let (span, name) = if let Some(a) =
+            ATTRS_TO_CHECK.iter().find(|attr_to_check| attr.has_name(**attr_to_check))
+        {
             (attr.span(), *a)
         } else if let Attribute::Parsed(AttributeKind::Repr(r)) = attr {
             (r.first().unwrap().1, sym::repr)
@@ -2671,11 +2678,7 @@ fn check_invalid_crate_level_attr(tcx: TyCtxt<'_>, attrs: &[Attribute]) {
                 .span_to_snippet(span)
                 .ok()
                 .filter(|src| src.starts_with("#!["))
-                .map(|_| {
-                   span
-                        .with_lo(span.lo() + BytePos(1))
-                        .with_hi(span.lo() + BytePos(2))
-                }),
+                .map(|_| span.with_lo(span.lo() + BytePos(1)).with_hi(span.lo() + BytePos(2))),
             name,
             item,
         });

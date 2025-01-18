@@ -9,7 +9,7 @@ use rustc_ast_pretty::pprust;
 use rustc_errors::DiagCtxtHandle;
 use rustc_hir::{self as hir, AttrPath};
 use rustc_span::symbol::{Ident, kw};
-use rustc_span::{ErrorGuaranteed, Span, Symbol, DUMMY_SP};
+use rustc_span::{DUMMY_SP, ErrorGuaranteed, Span, Symbol};
 
 pub(crate) struct SegmentIterator<'a> {
     offset: usize,
@@ -115,11 +115,13 @@ impl<'a> ArgParser<'a> {
     pub(crate) fn from_attr_args(value: &'a AttrArgs, dcx: DiagCtxtHandle<'a>) -> Self {
         match value {
             AttrArgs::Empty => Self::NoArgs,
-            AttrArgs::Delimited(args) if args.delim == Delimiter::Parenthesis => Self::List(MetaItemListParser::new(args, dcx)),
+            AttrArgs::Delimited(args) if args.delim == Delimiter::Parenthesis => {
+                Self::List(MetaItemListParser::new(args, dcx))
+            }
             AttrArgs::Delimited(args) => {
                 Self::List(MetaItemListParser { sub_parsers: vec![], span: args.dspan.entire() })
-            },
-            AttrArgs::Eq { eq_span, expr } => Self::NameValue( NameValueParser {
+            }
+            AttrArgs::Eq { eq_span, expr } => Self::NameValue(NameValueParser {
                 eq_span: *eq_span,
                 value: expr_to_lit(dcx, &expr),
                 value_span: expr.span,
@@ -135,7 +137,7 @@ impl<'a> ArgParser<'a> {
     /// - `#[rustfmt::skip::macros(target_macro_name)]`: `(target_macro_name)` is a list
     pub(crate) fn list(&self) -> Option<&MetaItemListParser<'a>> {
         match self {
-            Self::List(l)  => Some(l),
+            Self::List(l) => Some(l),
             Self::NameValue(_) | Self::NoArgs => None,
         }
     }
@@ -170,7 +172,7 @@ impl<'a> ArgParser<'a> {
 pub(crate) enum MetaItemOrLitParser<'a> {
     MetaItemParser(MetaItemParser<'a>),
     Lit(MetaItemLit),
-    Err(Span, ErrorGuaranteed)
+    Err(Span, ErrorGuaranteed),
 }
 
 impl<'a> MetaItemOrLitParser<'a> {
@@ -428,9 +430,12 @@ impl<'a> MetaItemListParserContext<'a> {
             Some(x) => {
                 // malformed attributes can get here. We can't crash, but somewhere else should've
                 // already warned for this.
-                self.dcx.span_delayed_bug(x.span(), format!("unexpected token {x:?} in built-in attribute path"));
+                self.dcx.span_delayed_bug(
+                    x.span(),
+                    format!("unexpected token {x:?} in built-in attribute path"),
+                );
                 None
-            },
+            }
             None => None,
         }
     }
@@ -444,11 +449,9 @@ impl<'a> MetaItemListParserContext<'a> {
                 }
                 .value()
             }
-            Some(TokenTree::Token(ref token, _)) => if let Some(s) = MetaItemLit::from_token(token) {
-                Some(s)
-            } else {
-                None
-            },
+            Some(TokenTree::Token(ref token, _)) => {
+                if let Some(s) = MetaItemLit::from_token(token) { Some(s) } else { None }
+            }
             x => unreachable!("{x:?}"),
         }
     }
@@ -474,41 +477,46 @@ impl<'a> MetaItemListParserContext<'a> {
         }
 
         // or a path.
-        let path = if let Some(TokenTree::Token(Token { kind: token::Interpolated(nt), span, .. }, _)) = self.inside_delimiters.peek()
-        {
-            match &**nt {
-                // or maybe a full nt meta including the path but we return immediately
-                token::Nonterminal::NtMeta(item) => {
-                    self.inside_delimiters.next();
+        let path =
+            if let Some(TokenTree::Token(Token { kind: token::Interpolated(nt), span, .. }, _)) =
+                self.inside_delimiters.peek()
+            {
+                match &**nt {
+                    // or maybe a full nt meta including the path but we return immediately
+                    token::Nonterminal::NtMeta(item) => {
+                        self.inside_delimiters.next();
 
-                    return Some(MetaItemOrLitParser::MetaItemParser(MetaItemParser {
-                        path: PathParser::Ast(&item.path),
-                        args: ArgParser::from_attr_args(&item.args, self.dcx),
-                        dcx: self.dcx,
-                    }))
-                }
-                // an already interpolated path from a macro expansion is a path, no need to parse
-                // one from tokens
-                token::Nonterminal::NtPath(path) => {
-                    self.inside_delimiters.next();
+                        return Some(MetaItemOrLitParser::MetaItemParser(MetaItemParser {
+                            path: PathParser::Ast(&item.path),
+                            args: ArgParser::from_attr_args(&item.args, self.dcx),
+                            dcx: self.dcx,
+                        }));
+                    }
+                    // an already interpolated path from a macro expansion is a path, no need to parse
+                    // one from tokens
+                    token::Nonterminal::NtPath(path) => {
+                        self.inside_delimiters.next();
 
-                    AttrPath::from_ast(path)
-                }
-                _ => {
-                    self.inside_delimiters.next();
-                    // we go into this path if an expr ended up in an attribute that
-                    // expansion did not turn into a literal. Say, `#[repr(align(macro!()))]`
-                    // where the macro didn't expand to a literal. An error is already given
-                    // for this at this point, and then we do continue. This makes this path
-                    // reachable...
-                    let e = self.dcx.span_delayed_bug(*span, "expr in place where literal is expected (builtin attr parsing)");
+                        AttrPath::from_ast(path)
+                    }
+                    _ => {
+                        self.inside_delimiters.next();
+                        // we go into this path if an expr ended up in an attribute that
+                        // expansion did not turn into a literal. Say, `#[repr(align(macro!()))]`
+                        // where the macro didn't expand to a literal. An error is already given
+                        // for this at this point, and then we do continue. This makes this path
+                        // reachable...
+                        let e = self.dcx.span_delayed_bug(
+                            *span,
+                            "expr in place where literal is expected (builtin attr parsing)",
+                        );
 
-                    return Some(MetaItemOrLitParser::Err(*span, e))
+                        return Some(MetaItemOrLitParser::Err(*span, e));
+                    }
                 }
-            }
-        } else {
-            self.next_path()?
-        };
+            } else {
+                self.next_path()?
+            };
 
         // Paths can be followed by:
         // - `(more meta items)` (another list)
@@ -520,25 +528,37 @@ impl<'a> MetaItemListParserContext<'a> {
 
                 MetaItemParser {
                     path: PathParser::Attr(path),
-                    args: ArgParser::List(MetaItemListParser::new_tts(inner_tokens.iter(), dspan.entire(), self.dcx)),
+                    args: ArgParser::List(MetaItemListParser::new_tts(
+                        inner_tokens.iter(),
+                        dspan.entire(),
+                        self.dcx,
+                    )),
                     dcx: self.dcx,
                 }
             }
             Some(TokenTree::Delimited(span, ..)) => {
                 self.inside_delimiters.next();
                 self.dcx.span_delayed_bug(span.entire(), "wrong delimiters");
-                return None
+                return None;
             }
             Some(TokenTree::Token(Token { kind: token::Eq, span }, _)) => {
                 self.inside_delimiters.next();
                 let value = self.value()?;
                 MetaItemParser {
                     path: PathParser::Attr(path),
-                    args: ArgParser::NameValue(NameValueParser { eq_span: *span, value_span: value.span, value }),
+                    args: ArgParser::NameValue(NameValueParser {
+                        eq_span: *span,
+                        value_span: value.span,
+                        value,
+                    }),
                     dcx: self.dcx,
                 }
             }
-            _ => MetaItemParser { path: PathParser::Attr(path), args: ArgParser::NoArgs, dcx: self.dcx },
+            _ => MetaItemParser {
+                path: PathParser::Attr(path),
+                args: ArgParser::NoArgs,
+                dcx: self.dcx,
+            },
         }))
     }
 
@@ -555,9 +575,7 @@ impl<'a> MetaItemListParserContext<'a> {
                 None | Some(TokenTree::Token(Token { kind: token::Comma, .. }, _)) => {
                     self.inside_delimiters.next();
                 }
-                Some(_) => {
-
-                }
+                Some(_) => {}
             }
         }
 
@@ -577,11 +595,7 @@ impl<'a> MetaItemListParser<'a> {
     }
 
     fn new_tts(tts: TokenStreamIter<'a>, span: Span, dcx: DiagCtxtHandle<'a>) -> Self {
-        MetaItemListParserContext {
-            inside_delimiters: tts.peekable(),
-            dcx,
-        }
-        .parse(span)
+        MetaItemListParserContext { inside_delimiters: tts.peekable(), dcx }.parse(span)
     }
 
     /// Lets you pick and choose as what you want to parse each element in the list

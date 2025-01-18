@@ -1,7 +1,7 @@
 use std::iter;
 
 use rustc_attr_data_structures::AttributeKind;
-use rustc_span::{sym, Span, Symbol};
+use rustc_span::{Span, Symbol, sym};
 
 use super::{CombineAttributeGroup, ConvertFn};
 use crate::context::AttributeAcceptContext;

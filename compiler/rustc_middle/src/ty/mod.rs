@@ -1539,7 +1539,10 @@ impl<'tcx> TyCtxt<'tcx> {
                         max_align = max_align.max(Some(align));
                         ReprFlags::empty()
                     }
-                    attr::ReprEmpty => { /* skip these, they're just for diagnostics */ ReprFlags::empty() }
+                    attr::ReprEmpty => {
+                        /* skip these, they're just for diagnostics */
+                        ReprFlags::empty()
+                    }
                 });
             }
         }
@@ -1765,8 +1768,6 @@ impl<'tcx> TyCtxt<'tcx> {
         if let Some(did) = did.as_local() {
             self.hir().attrs(self.local_def_id_to_hir_id(did)).iter()
         } else {
-            // TODO: commented this check because we don't have the attr symbol from get_attrs here
-            // debug_assert!(rustc_feature::encode_cross_crate(attr));
             self.attrs_for_def(did).iter()
         }
     }

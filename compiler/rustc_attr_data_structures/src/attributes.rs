@@ -142,26 +142,16 @@ impl Deprecation {
 /// happen.
 ///
 /// For more docs, look in [`rustc_attr`](https://doc.rust-lang.org/stable/nightly-rustc/rustc_attr/index.html)
-// FIXME(jdonszelmann): rename to AttributeKind once hir::AttributeKind is dissolved
 #[derive(Clone, Debug, HashStable_Generic, Encodable, Decodable)]
 pub enum AttributeKind {
     // tidy-alphabetical-start
-    Allow,
     AllowConstFnUnstable(ThinVec<Symbol>),
-    AllowInternalUnsafe,
     AllowInternalUnstable(ThinVec<(Symbol, Span)>),
-    AutoDiff,
-    AutomaticallyDerived,
     BodyStability {
         stability: DefaultBodyStability,
         /// Span of the `#[rustc_default_body_unstable(...)]` attribute
         span: Span,
     },
-    Cfg,
-    CfgAttr,
-    CfiEncoding, // FIXME(cfi_encoding)
-    Cold,
-    CollapseDebuginfo,
     Confusables {
         symbols: ThinVec<Symbol>,
         // FIXME(jdonszelmann): remove when target validation code is moved
@@ -173,14 +163,6 @@ pub enum AttributeKind {
         span: Span,
     },
     ConstStabilityIndirect,
-    ConstTrait,
-    Coroutine,
-    Coverage,
-    CustomMir,
-    DebuggerVisualizer,
-    DefaultLibAllocator,
-    Deny,
-    DeprecatedSafe, // FIXME(deprecated_safe)
     Deprecation {
         deprecation: Deprecation,
         span: Span,
@@ -196,57 +178,12 @@ pub enum AttributeKind {
         span: Span,
         comment: Symbol,
     },
-    Expect,
-    ExportName,
-    FfiConst,
-    FfiPure,
-    Forbid,
-    Fundamental,
-    Ignore,
-    // TODO: must contain span for clippy
-    Inline,
-    InstructionSet, // broken on stable!!!
-    Lang,
-    Link,
-    Linkage,
-    LinkName,
-    LinkOrdinal,
-    LinkSection,
-    MacroExport,
     MacroTransparency(Transparency),
-    MacroUse,
-    Marker,
-    MayDangle,
-    MustNotSuspend,
-    MustUse,
-    NeedsAllocator,
-    NoImplicitPrelude,
-    NoLink,
-    NoMangle,
-    NonExhaustive,
-    NoSanitize,
-    OmitGdbPrettyPrinterSection, // FIXME(omit_gdb_pretty_printer_section)
-    PanicHandler,
-    PatchableFunctionEntry, // FIXME(patchable_function_entry)
-    Path,
-    Pointee, // FIXME(derive_smart_pointer)
-    PreludeImport,
-    ProcMacro,
-    ProcMacroAttribute,
-    ProcMacroDerive,
     Repr(ThinVec<(ReprAttr, Span)>),
     Stability {
         stability: Stability,
         /// Span of the `#[stable(...)]` or `#[unstable(...)]` attribute
         span: Span,
     },
-    Start,
-    TargetFeature,
-    ThreadLocal,
-    TrackCaller,
-    Unstable,
-    Used,
-    Warn,
-    WindowsSubsystem, // broken on stable!!!
-                      // tidy-alphabetical-end
+    // tidy-alphabetical-end
 }

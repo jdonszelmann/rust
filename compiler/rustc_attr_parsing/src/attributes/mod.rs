@@ -141,11 +141,6 @@ impl<T: CombineAttributeGroup> AttributeGroup for Combine<T> {
         &[(T::PATH, |group: &mut Combine<T>, cx, args| group.1.extend(T::extend(cx, args)))];
 
     fn finalize(self, _cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
-        if self.1.is_empty() {
-            None
-        } else {
-            // TODO: what filter here?
-            Some(T::CONVERT(self.1))
-        }
+        if self.1.is_empty() { None } else { Some(T::CONVERT(self.1)) }
     }
 }

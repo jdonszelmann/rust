@@ -19,7 +19,6 @@ pub fn parse_version(s: Symbol) -> Option<RustcVersion> {
     Some(RustcVersion { major, minor, patch })
 }
 
-// TODO: create single word attribute map
 pub fn is_builtin_attr(attr: &impl AttributeExt) -> bool {
     attr.is_doc_comment() || attr.ident().is_some_and(|ident| is_builtin_attr_name(ident.name))
 }

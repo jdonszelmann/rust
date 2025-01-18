@@ -5,8 +5,9 @@ use std::mem::replace;
 use std::num::NonZero;
 
 use rustc_attr_parsing::{
-    self as attr, AttributeKind, ConstStability, DeprecatedSince, PartialConstStability, Stability,
-    StabilityLevel, StableSince, UnstableReason, VERSION_PLACEHOLDER, find_attr, AllowedThroughUnstableModules
+    self as attr, AllowedThroughUnstableModules, AttributeKind, ConstStability, DeprecatedSince,
+    PartialConstStability, Stability, StabilityLevel, StableSince, UnstableReason,
+    VERSION_PLACEHOLDER, find_attr,
 };
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_data_structures::unord::{ExtendUnord, UnordMap, UnordSet};
@@ -186,7 +187,7 @@ impl<'a, 'tcx> Annotator<'a, 'tcx> {
         }
 
         if let Some(body_stab) = body_stab {
-            // TODO: check that this item can have body stability
+            // FIXME: check that this item can have body stability
 
             self.index.default_body_stab_map.insert(def_id, body_stab);
             debug!(?self.index.default_body_stab_map);
@@ -800,8 +801,6 @@ impl<'tcx> Visitor<'tcx> for Checker<'tcx> {
                 let features = self.tcx.features();
                 if features.staged_api() {
                     let attrs = self.tcx.hir().attrs(item.hir_id());
-                    // TODO: check with https://github.com/rust-lang/rust/commit/e96808162ad7ff5906d7b58d32a25abe139e998c#diff-5f57ad10e1bdde3d046b258d390fd2ecc6f1511158aa130cebb72093da16ef29
-
                     let stab = attr::find_attr!(attrs, AttributeKind::Stability{stability, span} => (*stability, *span));
 
                     // FIXME(jdonszelmann): make it impossible to miss the or_else in the typesystem

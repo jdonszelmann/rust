@@ -41,9 +41,7 @@ impl CombineAttributeGroup for ReprGroup {
 
         for param in list.mixed() {
             if let Some(_) = param.lit() {
-                cx.emit_err(session_diagnostics::ReprIdent {
-                    span: cx.attr_span,
-                });
+                cx.emit_err(session_diagnostics::ReprIdent { span: cx.attr_span });
                 continue;
             }
 
@@ -57,22 +55,21 @@ impl CombineAttributeGroup for ReprGroup {
 
 macro_rules! int_pat {
     () => {
-          sym::i8
-          | sym::u8
-          | sym::i16
-          | sym::u16
-          | sym::i32
-          | sym::u32
-          | sym::i64
-          | sym::u64
-          | sym::i128
-          | sym::u128
-          | sym::isize
-          | sym::usize
+        sym::i8
+            | sym::u8
+            | sym::i16
+            | sym::u16
+            | sym::i32
+            | sym::u32
+            | sym::i64
+            | sym::u64
+            | sym::i128
+            | sym::u128
+            | sym::isize
+            | sym::usize
     };
 }
 
-// TODO: inline
 fn int_type_of_word(s: Symbol) -> Option<IntType> {
     use IntType::*;
 
@@ -93,10 +90,7 @@ fn int_type_of_word(s: Symbol) -> Option<IntType> {
     }
 }
 
-fn parse_repr(
-    cx: &AttributeAcceptContext<'_>,
-    param: &MetaItemParser<'_>,
-) -> Option<ReprAttr> {
+fn parse_repr(cx: &AttributeAcceptContext<'_>, param: &MetaItemParser<'_>) -> Option<ReprAttr> {
     use ReprAttr::*;
 
     // FIXME(jdonszelmann): invert the parsing here to match on the word first and then the
@@ -104,16 +98,18 @@ fn parse_repr(
     let (ident, args) = param.word_or_empty();
 
     match (ident.name, args) {
-        (sym::align, ArgParser::NoArgs) =>  {
+        (sym::align, ArgParser::NoArgs) => {
             cx.emit_err(session_diagnostics::InvalidReprAlignNeedArg { span: ident.span });
             None
         }
         (sym::align, ArgParser::List(l)) => parse_repr_align(cx, l, param.span(), AlignKind::Align),
 
         (sym::packed, ArgParser::NoArgs) => Some(ReprPacked(Align::ONE)),
-        (sym::packed, ArgParser::List(l)) => parse_repr_align(cx, l, param.span(), AlignKind::Packed),
+        (sym::packed, ArgParser::List(l)) => {
+            parse_repr_align(cx, l, param.span(), AlignKind::Packed)
+        }
 
-        (sym::align | sym::packed, ArgParser::NameValue(l)) =>  {
+        (sym::align | sym::packed, ArgParser::NameValue(l)) => {
             cx.emit_err(session_diagnostics::IncorrectReprFormatGeneric {
                 span: param.span(),
                 // FIXME(jdonszelmann) can just be a string in the diag type
@@ -127,24 +123,19 @@ fn parse_repr(
             None
         }
 
-        (sym::Rust, ArgParser::NoArgs) => {
-            Some(ReprRust)
-        }
-        (sym::C, ArgParser::NoArgs) => {
-            Some(ReprC)
-        }
-        (sym::simd, ArgParser::NoArgs) => {
-            Some(ReprSimd)
-        }
-        (sym::transparent, ArgParser::NoArgs) => {
-            Some(ReprTransparent)
-        }
-        (i@int_pat!(), ArgParser::NoArgs) => {
+        (sym::Rust, ArgParser::NoArgs) => Some(ReprRust),
+        (sym::C, ArgParser::NoArgs) => Some(ReprC),
+        (sym::simd, ArgParser::NoArgs) => Some(ReprSimd),
+        (sym::transparent, ArgParser::NoArgs) => Some(ReprTransparent),
+        (i @ int_pat!(), ArgParser::NoArgs) => {
             // int_pat!() should make sure it always parses
             Some(ReprInt(int_type_of_word(i).unwrap()))
         }
 
-        (sym::Rust | sym::C | sym::simd | sym::transparent | int_pat!(), ArgParser::NameValue(_)) => {
+        (
+            sym::Rust | sym::C | sym::simd | sym::transparent | int_pat!(),
+            ArgParser::NameValue(_),
+        ) => {
             cx.emit_err(session_diagnostics::InvalidReprHintNoValue {
                 span: param.span(),
                 name: ident.to_string(),
@@ -168,10 +159,15 @@ fn parse_repr(
 
 enum AlignKind {
     Packed,
-    Align
+    Align,
 }
 
-fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'_>, param_span: Span, align_kind: AlignKind) -> Option<ReprAttr> {
+fn parse_repr_align(
+    cx: &AttributeAcceptContext<'_>,
+    list: &MetaItemListParser<'_>,
+    param_span: Span,
+    align_kind: AlignKind,
+) -> Option<ReprAttr> {
     use AlignKind::*;
 
     let Some(align) = list.single() else {
@@ -180,14 +176,15 @@ fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'
                 cx.emit_err(session_diagnostics::IncorrectReprFormatPackedOneOrZeroArg {
                     span: param_span,
                 });
-            },
+            }
             Align => {
-                cx.dcx()
-                    .emit_err(session_diagnostics::IncorrectReprFormatAlignOneArg { span: param_span });
+                cx.dcx().emit_err(session_diagnostics::IncorrectReprFormatAlignOneArg {
+                    span: param_span,
+                });
             }
         }
 
-        return None
+        return None;
     };
 
     let Some(lit) = align.lit() else {
@@ -196,7 +193,7 @@ fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'
                 cx.emit_err(session_diagnostics::IncorrectReprFormatPackedExpectInteger {
                     span: align.span(),
                 });
-            },
+            }
             Align => {
                 cx.emit_err(session_diagnostics::IncorrectReprFormatExpectInteger {
                     span: align.span(),
@@ -204,7 +201,7 @@ fn parse_repr_align(cx: &AttributeAcceptContext<'_>, list: &MetaItemListParser<'
             }
         }
 
-        return None
+        return None;
     };
 
     match parse_alignment(&lit.kind) {

@@ -1868,7 +1868,7 @@ pub(crate) struct NoSanitize<'a> {
     pub attr_str: &'a str,
 }
 
-// TODO: move back to rustc_attr
+// FIXME(jdonszelmann): move back to rustc_attr
 #[derive(Diagnostic)]
 #[diag(passes_rustc_const_stable_indirect_pairing)]
 pub(crate) struct RustcConstStableIndirectPairing {

@@ -1,4 +1,3 @@
-
 use rustc_attr_data_structures::AttributeKind;
 use rustc_span::{Span, Symbol, sym};
 use thin_vec::ThinVec;
@@ -17,7 +16,7 @@ pub(crate) struct ConfusablesGroup {
 impl AttributeGroup for ConfusablesGroup {
     const ATTRIBUTES: AttributeMapping<Self> = &[(&[sym::rustc_confusables], |this, cx, args| {
         let Some(list) = args.list() else {
-            // TODO: error when not a list? Bring validation code here.
+            // FIXME(jdonszelmann): error when not a list? Bring validation code here.
             //       NOTE: currently subsequent attributes are silently ignored using
             //       tcx.get_attr().
             return;

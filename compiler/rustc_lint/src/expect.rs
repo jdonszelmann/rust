@@ -40,10 +40,6 @@ fn check_expectations(tcx: TyCtxt<'_>, tool_filter: Option<Symbol>) {
                 // We are an `eval_always` query, so looking at the attribute's `AttrId` is ok.
                 let attr_id = tcx.hir().attrs(hir_id)[attr_index as usize].id();
 
-                // TODO: we're only dealling with allow/deny/etc lint attributes. They can have an
-                // ID, while other attributes don't necessarily. however, how do we assert that
-                // nicely?
-                // let attr_id = todo!();
                 (attr_id, lint_index)
             }
             _ => panic!("fulfilled expectations must have a lint index"),

@@ -7,7 +7,7 @@ use crate::parser::ArgParser;
 
 pub(crate) struct TransparencyGroup;
 
-// TODO: fix this but I don't want to rn
+// FIXME(jdonszelmann): make these proper diagnostics
 #[allow(rustc::untranslatable_diagnostic)]
 #[allow(rustc::diagnostic_outside_of_impl)]
 impl SingleAttributeGroup for TransparencyGroup {

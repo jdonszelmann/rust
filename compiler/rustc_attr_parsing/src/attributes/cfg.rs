@@ -1,4 +1,3 @@
-// TODO: convert cfg properly.... And learn how cfg works I guess
 use rustc_ast::{LitKind, MetaItem, MetaItemInner, MetaItemKind, MetaItemLit, NodeId};
 use rustc_ast_pretty::pprust;
 use rustc_attr_data_structures::RustcVersion;
