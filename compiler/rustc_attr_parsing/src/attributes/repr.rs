@@ -3,8 +3,8 @@ use rustc_ast::{IntTy, LitIntType, LitKind, UintTy};
 use rustc_attr_data_structures::{AttributeKind, IntType, ReprAttr};
 use rustc_span::{Span, Symbol, sym};
 
-use super::{CombineAttributeGroup, ConvertFn};
-use crate::context::AttributeAcceptContext;
+use super::{CombineAttributeParser, ConvertFn};
+use crate::context::AcceptContext;
 use crate::parser::{ArgParser, MetaItemListParser, MetaItemParser};
 use crate::session_diagnostics;
 use crate::session_diagnostics::IncorrectReprFormatGenericCause;
@@ -17,15 +17,15 @@ use crate::session_diagnostics::IncorrectReprFormatGenericCause;
 /// structure layout, `packed` to remove padding, and `transparent` to delegate representation
 /// concerns to the only non-ZST field.
 // FIXME(jdonszelmann): is a vec the right representation here even? isn't it just a struct?
-pub(crate) struct ReprGroup;
+pub(crate) struct ReprParser;
 
-impl CombineAttributeGroup for ReprGroup {
+impl CombineAttributeParser for ReprParser {
     type Item = (ReprAttr, Span);
     const PATH: &'static [rustc_span::Symbol] = &[sym::repr];
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::Repr;
 
     fn extend<'a>(
-        cx: &'a AttributeAcceptContext<'a>,
+        cx: &'a AcceptContext<'a>,
         args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
         let mut reprs = Vec::new();
@@ -90,7 +90,7 @@ fn int_type_of_word(s: Symbol) -> Option<IntType> {
     }
 }
 
-fn parse_repr(cx: &AttributeAcceptContext<'_>, param: &MetaItemParser<'_>) -> Option<ReprAttr> {
+fn parse_repr(cx: &AcceptContext<'_>, param: &MetaItemParser<'_>) -> Option<ReprAttr> {
     use ReprAttr::*;
 
     // FIXME(jdonszelmann): invert the parsing here to match on the word first and then the
@@ -163,7 +163,7 @@ enum AlignKind {
 }
 
 fn parse_repr_align(
-    cx: &AttributeAcceptContext<'_>,
+    cx: &AcceptContext<'_>,
     list: &MetaItemListParser<'_>,
     param_span: Span,
     align_kind: AlignKind,

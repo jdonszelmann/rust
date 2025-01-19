@@ -12,15 +12,15 @@ use rustc_session::Session;
 use rustc_span::symbol::kw;
 use rustc_span::{DUMMY_SP, ErrorGuaranteed, Span, Symbol, sym};
 
-use crate::attributes::allow_unstable::{AllowConstFnUnstableGroup, AllowInternalUnstableGroup};
-use crate::attributes::confusables::ConfusablesGroup;
-use crate::attributes::deprecation::DeprecationGroup;
-use crate::attributes::repr::ReprGroup;
+use crate::attributes::allow_unstable::{AllowConstFnUnstableParser, AllowInternalUnstableParser};
+use crate::attributes::confusables::ConfusablesParser;
+use crate::attributes::deprecation::DeprecationParser;
+use crate::attributes::repr::ReprParser;
 use crate::attributes::stability::{
-    BodyStabilityGroup, ConstStabilityGroup, ConstStabilityIndirectGroup, StabilityGroup,
+    BodyStabilityParser, ConstStabilityIndirectParser, ConstStabilityParser, StabilityParser,
 };
-use crate::attributes::transparency::TransparencyGroup;
-use crate::attributes::{AttributeGroup, Combine, Single};
+use crate::attributes::transparency::TransparencyParser;
+use crate::attributes::{AttributeParser as _, Combine, Single};
 use crate::parser::{ArgParser, MetaItemParser};
 
 macro_rules! attribute_groups {
@@ -28,11 +28,11 @@ macro_rules! attribute_groups {
         pub(crate) static $name: ident = [$($names: ty),* $(,)?];
     ) => {
         pub(crate) static $name: LazyLock<(
-            BTreeMap<&'static [Symbol], Vec<Box<dyn Fn(&AttributeAcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>,
-            Vec<Box<dyn Send + Sync + Fn(&AttributeGroupContext<'_>) -> Option<AttributeKind>>>
+            BTreeMap<&'static [Symbol], Vec<Box<dyn Fn(&AcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>,
+            Vec<Box<dyn Send + Sync + Fn(&FinalizeContext<'_>) -> Option<AttributeKind>>>
         )> = LazyLock::new(|| {
-            let mut accepts = BTreeMap::<_, Vec<Box<dyn Fn(&AttributeAcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>::new();
-            let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&AttributeGroupContext<'_>) -> Option<AttributeKind>>>::new();
+            let mut accepts = BTreeMap::<_, Vec<Box<dyn Fn(&AcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>::new();
+            let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&FinalizeContext<'_>) -> Option<AttributeKind>>>::new();
 
             $(
                 {
@@ -61,39 +61,38 @@ macro_rules! attribute_groups {
 }
 
 attribute_groups!(
-    // TODO: rename to the same as in `AttributeDuplicates`
     pub(crate) static ATTRIBUTE_GROUP_MAPPING = [
         // tidy-alphabetical-start
-        BodyStabilityGroup,
-        ConfusablesGroup,
-        ConstStabilityGroup,
-        StabilityGroup,
+        BodyStabilityParser,
+        ConfusablesParser,
+        ConstStabilityParser,
+        StabilityParser,
         // tidy-alphabetical-end
 
         // tidy-alphabetical-start
-        Combine<AllowConstFnUnstableGroup>,
-        Combine<AllowInternalUnstableGroup>,
-        Combine<ReprGroup>,
+        Combine<AllowConstFnUnstableParser>,
+        Combine<AllowInternalUnstableParser>,
+        Combine<ReprParser>,
         // tidy-alphabetical-end
 
         // tidy-alphabetical-start
-        Single<ConstStabilityIndirectGroup>,
-        Single<DeprecationGroup>,
-        Single<TransparencyGroup>,
+        Single<ConstStabilityIndirectParser>,
+        Single<DeprecationParser>,
+        Single<TransparencyParser>,
         // tidy-alphabetical-end
     ];
 );
 
-/// Context created for every attribute that's accepted
+/// Context given to every attribute parser when accepting
 ///
-/// Gives [`AttributeGroup`]s enough information to create errors, for example.
-pub(crate) struct AttributeAcceptContext<'a> {
-    pub(crate) group_cx: &'a AttributeGroupContext<'a>,
+/// Gives [`AttributeParser`]s enough information to create errors, for example.
+pub(crate) struct AcceptContext<'a> {
+    pub(crate) group_cx: &'a FinalizeContext<'a>,
     /// The span of the attribute currently being parsed
     pub(crate) attr_span: Span,
 }
 
-impl<'a> AttributeAcceptContext<'a> {
+impl<'a> AcceptContext<'a> {
     pub(crate) fn emit_err(&self, diag: impl Diagnostic<'a>) -> ErrorGuaranteed {
         if !self.limit_diagnostics {
             self.dcx().emit_err(diag)
@@ -104,27 +103,27 @@ impl<'a> AttributeAcceptContext<'a> {
     }
 }
 
-impl<'a> Deref for AttributeAcceptContext<'a> {
-    type Target = AttributeGroupContext<'a>;
+impl<'a> Deref for AcceptContext<'a> {
+    type Target = FinalizeContext<'a>;
 
     fn deref(&self) -> &Self::Target {
         &self.group_cx
     }
 }
 
-/// Context created for every attribute group that's parsed
+/// Context given to every attribute parser during finalization.
 ///
-/// Gives [`AttributeGroup`]s enough information to create errors, for example.
-pub(crate) struct AttributeGroupContext<'a> {
+/// Gives [`AttributeParser`](crate::attributes::AttributeParser)s enough information to create errors, for example.
+pub(crate) struct FinalizeContext<'a> {
     /// The parse context, gives access to the session and the
     /// diagnostics context.
-    pub(crate) cx: &'a AttributeParseContext<'a>,
+    pub(crate) cx: &'a AttributeParser<'a>,
     /// The span of the syntactical component this attribute was applied to
     pub(crate) target_span: Span,
 }
 
-impl<'a> Deref for AttributeGroupContext<'a> {
-    type Target = AttributeParseContext<'a>;
+impl<'a> Deref for FinalizeContext<'a> {
+    type Target = AttributeParser<'a>;
 
     fn deref(&self) -> &Self::Target {
         &self.cx
@@ -139,7 +138,8 @@ pub enum OmitDoc {
 
 /// Context created once, for example as part of the ast lowering
 /// context, through which all attributes can be lowered.
-pub struct AttributeParseContext<'sess> {
+pub struct AttributeParser<'sess> {
+    #[allow(dead_code)] // FIXME(jdonszelmann): needed later to verify we parsed all attributes
     tools: Vec<Symbol>,
     sess: &'sess Session,
     features: Option<&'sess Features>,
@@ -155,7 +155,7 @@ pub struct AttributeParseContext<'sess> {
     pub(crate) limit_diagnostics: bool,
 }
 
-impl<'sess> AttributeParseContext<'sess> {
+impl<'sess> AttributeParser<'sess> {
     /// This method allows you to parse attributes *before* you have access to features or tools.
     /// One example where this is necessary, is to parse `feature` attributes themselves for
     /// example.
@@ -215,7 +215,7 @@ impl<'sess> AttributeParseContext<'sess> {
     ) -> Vec<Attribute> {
         let mut attributes = Vec::new();
 
-        let group_cx = AttributeGroupContext { cx: self, target_span };
+        let group_cx = FinalizeContext { cx: self, target_span };
 
         for attr in attrs {
             // if we're only looking for a single attribute,
@@ -266,10 +266,7 @@ impl<'sess> AttributeParseContext<'sess> {
 
                     if let Some(accepts) = ATTRIBUTE_GROUP_MAPPING.0.get(parts.as_slice()) {
                         for f in accepts {
-                            let cx = AttributeAcceptContext {
-                                group_cx: &group_cx,
-                                attr_span: attr.span,
-                            };
+                            let cx = AcceptContext { group_cx: &group_cx, attr_span: attr.span };
 
                             f(&cx, &args)
                         }
@@ -280,12 +277,14 @@ impl<'sess> AttributeParseContext<'sess> {
                         // documentation in this module and if you still think so you can add an exception
                         // to this assertion.
 
-                        const FIXME_TEMPORARY_ATTR_ALLOWLIST: &[Symbol] = &[sym::cfg];
-                        assert!(
-                            self.tools.contains(&parts[0]) || true,
-                            // || FIXME_TEMPORARY_ATTR_ALLOWLIST.contains(&parts[0]),
-                            "attribute {path} wasn't parsed and isn't a know tool attribute",
-                        );
+                        // FIXME(jdonszelmann): convert other attributes, and check with this that
+                        // we caught em all
+                        // const FIXME_TEMPORARY_ATTR_ALLOWLIST: &[Symbol] = &[sym::cfg];
+                        // assert!(
+                        //     self.tools.contains(&parts[0]) || true,
+                        //     // || FIXME_TEMPORARY_ATTR_ALLOWLIST.contains(&parts[0]),
+                        //     "attribute {path} wasn't parsed and isn't a know tool attribute",
+                        // );
 
                         attributes.push(Attribute::Unparsed(Box::new(AttrItem {
                             path: AttrPath::from_ast(&n.item.path),

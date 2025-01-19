@@ -185,7 +185,7 @@ use rustc_ast::{
     self as ast, AnonConst, BindingMode, ByRef, EnumDef, Expr, GenericArg, GenericParamKind,
     Generics, Mutability, PatKind, VariantData,
 };
-use rustc_attr_parsing::{AttributeKind, AttributeParseContext, ReprPacked};
+use rustc_attr_parsing::{AttributeKind, AttributeParser, ReprPacked};
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_hir::Attribute;
 use rustc_span::{DUMMY_SP, Ident, Span, Symbol, kw, sym};
@@ -482,7 +482,7 @@ impl<'a> TraitDef<'a> {
         match item {
             Annotatable::Item(item) => {
                 let is_packed = matches!(
-                    AttributeParseContext::parse_limited(cx.sess, &item.attrs, sym::repr, item.span, true),
+                    AttributeParser::parse_limited(cx.sess, &item.attrs, sym::repr, item.span, true),
                     Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.iter().any(|(x, _)| matches!(x, ReprPacked(..)))
                 );
 

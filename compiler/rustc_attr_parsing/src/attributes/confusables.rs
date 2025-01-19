@@ -2,19 +2,18 @@ use rustc_attr_data_structures::AttributeKind;
 use rustc_span::{Span, Symbol, sym};
 use thin_vec::ThinVec;
 
-use super::{AttributeGroup, AttributeMapping};
-use crate::context::AttributeGroupContext;
+use super::{AcceptMapping, AttributeParser};
+use crate::context::FinalizeContext;
 use crate::session_diagnostics;
 
-// TODO: turn into CombineGroup?
 #[derive(Default)]
-pub(crate) struct ConfusablesGroup {
+pub(crate) struct ConfusablesParser {
     confusables: ThinVec<Symbol>,
     first_span: Option<Span>,
 }
 
-impl AttributeGroup for ConfusablesGroup {
-    const ATTRIBUTES: AttributeMapping<Self> = &[(&[sym::rustc_confusables], |this, cx, args| {
+impl AttributeParser for ConfusablesParser {
+    const ATTRIBUTES: AcceptMapping<Self> = &[(&[sym::rustc_confusables], |this, cx, args| {
         let Some(list) = args.list() else {
             // FIXME(jdonszelmann): error when not a list? Bring validation code here.
             //       NOTE: currently subsequent attributes are silently ignored using
@@ -46,7 +45,7 @@ impl AttributeGroup for ConfusablesGroup {
         this.first_span.get_or_insert(cx.attr_span);
     })];
 
-    fn finalize(self, _cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+    fn finalize(self, _cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         if self.confusables.is_empty() {
             return None;
         }

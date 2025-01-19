@@ -3,33 +3,33 @@ use std::iter;
 use rustc_attr_data_structures::AttributeKind;
 use rustc_span::{Span, Symbol, sym};
 
-use super::{CombineAttributeGroup, ConvertFn};
-use crate::context::AttributeAcceptContext;
+use super::{CombineAttributeParser, ConvertFn};
+use crate::context::AcceptContext;
 use crate::parser::ArgParser;
 use crate::session_diagnostics;
 
-pub(crate) struct AllowInternalUnstableGroup;
-impl CombineAttributeGroup for AllowInternalUnstableGroup {
+pub(crate) struct AllowInternalUnstableParser;
+impl CombineAttributeParser for AllowInternalUnstableParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::allow_internal_unstable];
     type Item = (Symbol, Span);
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::AllowInternalUnstable;
 
     fn extend<'a>(
-        cx: &'a AttributeAcceptContext<'a>,
+        cx: &'a AcceptContext<'a>,
         args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
         parse_unstable(cx, args, Self::PATH[0]).into_iter().zip(iter::repeat(cx.attr_span))
     }
 }
 
-pub(crate) struct AllowConstFnUnstableGroup;
-impl CombineAttributeGroup for AllowConstFnUnstableGroup {
+pub(crate) struct AllowConstFnUnstableParser;
+impl CombineAttributeParser for AllowConstFnUnstableParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::rustc_allow_const_fn_unstable];
     type Item = Symbol;
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::AllowConstFnUnstable;
 
     fn extend<'a>(
-        cx: &'a AttributeAcceptContext<'a>,
+        cx: &'a AcceptContext<'a>,
         args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a {
         parse_unstable(cx, args, Self::PATH[0])
@@ -37,7 +37,7 @@ impl CombineAttributeGroup for AllowConstFnUnstableGroup {
 }
 
 fn parse_unstable<'a>(
-    cx: &AttributeAcceptContext<'_>,
+    cx: &AcceptContext<'_>,
     args: &'a ArgParser<'a>,
     symbol: Symbol,
 ) -> impl IntoIterator<Item = Symbol> {

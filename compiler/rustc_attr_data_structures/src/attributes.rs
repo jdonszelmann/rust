@@ -126,7 +126,6 @@ impl Deprecation {
     }
 }
 
-// TODO: improve these docs
 /// Attributes represent parsed, *built in* attributes. That means,
 /// attributes that are not actually ever expanded. They're instead used as markers,
 /// to guide the compilation process in various way in most every stage of the compiler.

@@ -7,8 +7,8 @@ use rustc_attr_data_structures::{
 use rustc_span::{ErrorGuaranteed, Span, Symbol, sym};
 
 use super::util::parse_version;
-use super::{AttributeGroup, AttributeMapping, SingleAttributeGroup};
-use crate::context::{AttributeAcceptContext, AttributeGroupContext};
+use super::{AcceptMapping, AttributeParser, SingleAttributeParser};
+use crate::context::{AcceptContext, FinalizeContext};
 use crate::parser::{ArgParser, MetaItemParser};
 use crate::session_diagnostics::{self, UnsupportedLiteralReason};
 
@@ -23,14 +23,14 @@ macro_rules! reject_outside_std {
 }
 
 #[derive(Default)]
-pub(crate) struct StabilityGroup {
+pub(crate) struct StabilityParser {
     allowed_through_unstable_modules: Option<AllowedThroughUnstableModules>,
     stability: Option<(Stability, Span)>,
 }
 
-impl StabilityGroup {
+impl StabilityParser {
     /// Checks, and emits an error when a stability (or unstability) was already set, which would be a duplicate.
-    fn check_duplicate(&self, cx: &AttributeAcceptContext<'_>) -> bool {
+    fn check_duplicate(&self, cx: &AcceptContext<'_>) -> bool {
         if let Some((_, _)) = self.stability {
             cx.emit_err(session_diagnostics::MultipleStabilityLevels { span: cx.attr_span });
             true
@@ -40,8 +40,8 @@ impl StabilityGroup {
     }
 }
 
-impl AttributeGroup for StabilityGroup {
-    const ATTRIBUTES: AttributeMapping<Self> = &[
+impl AttributeParser for StabilityParser {
+    const ATTRIBUTES: AcceptMapping<Self> = &[
         (&[sym::stable], |this, cx, args| {
             reject_outside_std!(cx);
             if !this.check_duplicate(cx)
@@ -68,7 +68,7 @@ impl AttributeGroup for StabilityGroup {
         }),
     ];
 
-    fn finalize(mut self, cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+    fn finalize(mut self, cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         if let Some(atum) = self.allowed_through_unstable_modules {
             if let Some((
                 Stability {
@@ -94,12 +94,12 @@ impl AttributeGroup for StabilityGroup {
 
 // FIXME(jdonszelmann) change to Single
 #[derive(Default)]
-pub(crate) struct BodyStabilityGroup {
+pub(crate) struct BodyStabilityParser {
     stability: Option<(DefaultBodyStability, Span)>,
 }
 
-impl AttributeGroup for BodyStabilityGroup {
-    const ATTRIBUTES: AttributeMapping<Self> =
+impl AttributeParser for BodyStabilityParser {
+    const ATTRIBUTES: AcceptMapping<Self> =
         &[(&[sym::rustc_default_body_unstable], |this, cx, args| {
             reject_outside_std!(cx);
             if this.stability.is_some() {
@@ -110,35 +110,35 @@ impl AttributeGroup for BodyStabilityGroup {
             }
         })];
 
-    fn finalize(self, _cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+    fn finalize(self, _cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         let (stability, span) = self.stability?;
 
         Some(AttributeKind::BodyStability { stability, span })
     }
 }
 
-pub(crate) struct ConstStabilityIndirectGroup;
-// TODO: single word attribute group
-impl SingleAttributeGroup for ConstStabilityIndirectGroup {
+pub(crate) struct ConstStabilityIndirectParser;
+// FIXME(jdonszelmann): single word attribute group when we have these
+impl SingleAttributeParser for ConstStabilityIndirectParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::rustc_const_stable_indirect];
 
     // ignore
-    fn on_duplicate(_cx: &AttributeAcceptContext<'_>, _first_span: Span) {}
+    fn on_duplicate(_cx: &AcceptContext<'_>, _first_span: Span) {}
 
-    fn convert(_cx: &AttributeAcceptContext<'_>, _args: &ArgParser<'_>) -> Option<AttributeKind> {
+    fn convert(_cx: &AcceptContext<'_>, _args: &ArgParser<'_>) -> Option<AttributeKind> {
         Some(AttributeKind::ConstStabilityIndirect)
     }
 }
 
 #[derive(Default)]
-pub(crate) struct ConstStabilityGroup {
+pub(crate) struct ConstStabilityParser {
     promotable: bool,
     stability: Option<(PartialConstStability, Span)>,
 }
 
-impl ConstStabilityGroup {
+impl ConstStabilityParser {
     /// Checks, and emits an error when a stability (or unstability) was already set, which would be a duplicate.
-    fn check_duplicate(&self, cx: &AttributeAcceptContext<'_>) -> bool {
+    fn check_duplicate(&self, cx: &AcceptContext<'_>) -> bool {
         if let Some((_, _)) = self.stability {
             cx.emit_err(session_diagnostics::MultipleStabilityLevels { span: cx.attr_span });
             true
@@ -148,8 +148,8 @@ impl ConstStabilityGroup {
     }
 }
 
-impl AttributeGroup for ConstStabilityGroup {
-    const ATTRIBUTES: AttributeMapping<Self> = &[
+impl AttributeParser for ConstStabilityParser {
+    const ATTRIBUTES: AcceptMapping<Self> = &[
         (&[sym::rustc_const_stable], |this, cx, args| {
             reject_outside_std!(cx);
 
@@ -179,7 +179,7 @@ impl AttributeGroup for ConstStabilityGroup {
         }),
     ];
 
-    fn finalize(mut self, cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+    fn finalize(mut self, cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         if self.promotable {
             if let Some((ref mut stab, _)) = self.stability {
                 stab.promotable = true;
@@ -200,7 +200,7 @@ impl AttributeGroup for ConstStabilityGroup {
 /// Emits an error when either the option was already Some, or the arguments weren't of form
 /// `name = value`
 fn insert_value_into_option_or_error(
-    cx: &AttributeAcceptContext<'_>,
+    cx: &AcceptContext<'_>,
     param: &MetaItemParser<'_>,
     item: &mut Option<Symbol>,
 ) -> Option<()> {
@@ -227,7 +227,7 @@ fn insert_value_into_option_or_error(
 /// Read the content of a `stable`/`rustc_const_stable` attribute, and return the feature name and
 /// its stability information.
 pub(crate) fn parse_stability(
-    cx: &AttributeAcceptContext<'_>,
+    cx: &AcceptContext<'_>,
     args: &ArgParser<'_>,
 ) -> Option<(Symbol, StabilityLevel)> {
     let mut feature = None;
@@ -293,7 +293,7 @@ pub(crate) fn parse_stability(
 // Read the content of a `unstable`/`rustc_const_unstable`/`rustc_default_body_unstable`
 /// attribute, and return the feature name and its stability information.
 pub(crate) fn parse_unstability(
-    cx: &AttributeAcceptContext<'_>,
+    cx: &AcceptContext<'_>,
     args: &ArgParser<'_>,
 ) -> Option<(Symbol, StabilityLevel)> {
     let mut feature = None;

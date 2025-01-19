@@ -43,7 +43,7 @@
 
 use rustc_ast::node_id::NodeMap;
 use rustc_ast::{self as ast, *};
-use rustc_attr_parsing::{AttributeParseContext, OmitDoc};
+use rustc_attr_parsing::{AttributeParser, OmitDoc};
 use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::sorted_map::SortedMap;
@@ -60,7 +60,8 @@ use rustc_macros::extension;
 use rustc_middle::span_bug;
 use rustc_middle::ty::{ResolverAstLowering, TyCtxt};
 use rustc_session::parse::{add_feature_diagnostics, feature_err};
-use rustc_span::{DUMMY_SP, DesugaringKind, Ident, Span, Symbol, kw, sym};
+use rustc_span::symbol::{Ident, Symbol, kw, sym};
+use rustc_span::{DUMMY_SP, DesugaringKind, Span};
 use smallvec::{SmallVec, smallvec};
 use thin_vec::ThinVec;
 use tracing::{debug, instrument, trace};
@@ -135,7 +136,7 @@ struct LoweringContext<'a, 'hir> {
     allow_for_await: Lrc<[Symbol]>,
     allow_async_fn_traits: Lrc<[Symbol]>,
 
-    attribute_parse_context: AttributeParseContext<'hir>,
+    attribute_parse_context: AttributeParser<'hir>,
 }
 
 impl<'a, 'hir> LoweringContext<'a, 'hir> {
@@ -181,7 +182,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             // interact with `gen`/`async gen` blocks
             allow_async_iterator: [sym::gen_future, sym::async_iterator].into(),
 
-            attribute_parse_context: AttributeParseContext::new(
+            attribute_parse_context: AttributeParser::new(
                 tcx.sess,
                 tcx.features(),
                 registered_tools,
@@ -1995,7 +1996,11 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
     fn lower_array_length_to_const_arg(&mut self, c: &AnonConst) -> &'hir hir::ConstArg<'hir> {
         match c.value.kind {
             ExprKind::Underscore => {
-                if !self.tcx.features().generic_arg_infer() {
+                if self.tcx.features().generic_arg_infer() {
+                    let ct_kind = hir::ConstArgKind::Infer(self.lower_span(c.value.span));
+                    self.arena
+                        .alloc(hir::ConstArg { hir_id: self.lower_node_id(c.id), kind: ct_kind })
+                } else {
                     feature_err(
                         &self.tcx.sess,
                         sym::generic_arg_infer,
@@ -2003,9 +2008,8 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                         fluent_generated::ast_lowering_underscore_array_length_unstable,
                     )
                     .stash(c.value.span, StashKey::UnderscoreForArrayLengths);
+                    self.lower_anon_const_to_const_arg(c)
                 }
-                let ct_kind = hir::ConstArgKind::Infer(self.lower_span(c.value.span));
-                self.arena.alloc(hir::ConstArg { hir_id: self.lower_node_id(c.id), kind: ct_kind })
             }
             _ => self.lower_anon_const_to_const_arg(c),
         }

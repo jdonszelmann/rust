@@ -6,7 +6,7 @@ use rustc_ast::{
     self as ast, GenericArg, GenericBound, GenericParamKind, ItemKind, MetaItem,
     TraitBoundModifiers, VariantData, WherePredicate,
 };
-use rustc_attr_parsing::{AttributeKind, AttributeParseContext, ReprTransparent};
+use rustc_attr_parsing::{AttributeKind, AttributeParser, ReprTransparent};
 use rustc_data_structures::flat_map_in_place::FlatMapInPlace;
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_hir::Attribute;
@@ -34,7 +34,7 @@ pub(crate) fn expand_deriving_coerce_pointee(
         && let ItemKind::Struct(struct_data, g) = &aitem.kind
     {
         let is_transparent = matches!(
-            AttributeParseContext::parse_limited(cx.sess, &aitem.attrs, sym::repr, span, true),
+            AttributeParser::parse_limited(cx.sess, &aitem.attrs, sym::repr, span, true),
             Some(Attribute::Parsed(AttributeKind::Repr(r))) if r.iter().any(|(r, _)| r == &ReprTransparent)
         );
 

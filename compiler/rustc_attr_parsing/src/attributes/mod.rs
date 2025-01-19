@@ -1,16 +1,13 @@
-//! [`AttributeGroup`]s are groups of attributes (groups can be size 1) that are parsed together.
-//! An [`AttributeGroup`] implementation defines its parser.
-//!
-//! You can find more docs on what groups are on [`AttributeGroup`] itself.
-//! However, for many types of attributes, implementing [`AttributeGroup`] is not necessary.
+//! You can find more docs on what groups are on [`AttributeParser`] itself.
+//! However, for many types of attributes, implementing [`AttributeParser`] is not necessary.
 //! It allows for a lot of flexibility you might not want.
 //!
-//! Specifically, you care about managing the state of your [AttributeGroup] state machine
-//! yourself. In this case you can choose to implement:
+//! Specifically, you might not care about managing the state of your [`AttributeParser`]
+//! state machine yourself. In this case you can choose to implement:
 //!
-//! - [`SingleAttributeGroup`]: makes it easy to implement an attribute which should error if it
+//! - [`SingleAttributeParser`]: makes it easy to implement an attribute which should error if it
 //! appears more than once in a list of attributes
-//! - [`CombineAttributeGroup`]: makes it easy to implement an attribute which should combine the
+//! - [`CombineAttributeParser`]: makes it easy to implement an attribute which should combine the
 //! contents of attributes, if an attribute appear multiple times in a list
 //!
 //! Attributes should be added to [`ATTRIBUTE_GROUP_MAPPING`](crate::context::ATTRIBUTE_GROUP_MAPPING) to be parsed.
@@ -21,7 +18,7 @@ use rustc_attr_data_structures::AttributeKind;
 use rustc_span::Span;
 use thin_vec::ThinVec;
 
-use crate::context::{AttributeAcceptContext, AttributeGroupContext};
+use crate::context::{AcceptContext, FinalizeContext};
 use crate::parser::ArgParser;
 
 pub(crate) mod allow_unstable;
@@ -33,60 +30,68 @@ pub(crate) mod stability;
 pub(crate) mod transparency;
 pub(crate) mod util;
 
-type AttributeHandler<T> = fn(&mut T, &AttributeAcceptContext<'_>, &ArgParser<'_>);
-type AttributeMapping<T> = &'static [(&'static [rustc_span::Symbol], AttributeHandler<T>)];
+type AcceptFn<T> = fn(&mut T, &AcceptContext<'_>, &ArgParser<'_>);
+type AcceptMapping<T> = &'static [(&'static [rustc_span::Symbol], AcceptFn<T>)];
 
-/// An [`AttributeGroup`] is a type which searches for syntactic attributes.
+/// An [`AttributeParser`] is a type which searches for syntactic attributes.
 ///
-/// Groups are often tiny state machines. [`Default::default`]
-/// creates a new instance that sits in some kind of initial state, usually that the
+/// Parsers are often tiny state machines that gets to see all syntactical attributes on an item.
+/// [`Default::default`] creates a fresh instance that sits in some kind of initial state, usually that the
 /// attribute it is looking for was not yet seen.
 ///
-/// Then, it defines what paths this group will accept in [`AttributeGroup::ATTRIBUTES`].
+/// Then, it defines what paths this group will accept in [`AttributeParser::ATTRIBUTES`].
 /// These are listed as pairs, of symbols and function pointers. The function pointer will
-/// be called when that attribute is found on an item, which can influence the state.
+/// be called when that attribute is found on an item, which can influence the state of the little
+/// state machine.
 ///
-/// Finally, all `finalize` functions are called, for each piece of state,
-pub(crate) trait AttributeGroup: Default + 'static {
-    /// The symbols for the attributes that this extractor can extract.
+/// Finally, after all attributes on an item have been seen, and possibly been accepted,
+/// the [`finalize`](AttributeParser::finalize) functions for all attribute parsers are called. Each can then report
+/// whether it has seen the attribute it has been looking for.
+///
+/// The state machine is automatically reset to parse attributes on the next item.
+pub(crate) trait AttributeParser: Default + 'static {
+    /// The symbols for the attributes that this parser is interested in.
     ///
     /// If an attribute has this symbol, the `accept` function will be called on it.
-    const ATTRIBUTES: AttributeMapping<Self>;
+    const ATTRIBUTES: AcceptMapping<Self>;
 
-    /// The extractor has gotten a chance to accept the attributes on an item,
-    /// now produce an attribute.
-    fn finalize(self, cx: &AttributeGroupContext<'_>) -> Option<AttributeKind>;
+    /// The parser has gotten a chance to accept the attributes on an item,
+    /// here it can produce an attribute.
+    fn finalize(self, cx: &FinalizeContext<'_>) -> Option<AttributeKind>;
 }
 
-/// A slightly simpler and more restricted way to convert attributes which you can implement for
-/// unit types. Assumes that a single attribute can only appear a single time on an item
-/// [`SingleGroup<T> where T: SingleAttributeGroup`](Single) creates an [`AttributeGroup`] from any [`SingleAttributeGroup`].
+/// Alternative to [`AttributeParser`] that automatically handles state management.
+/// A slightly simpler and more restricted way to convert attributes.
+/// Assumes that an attribute can only appear a single time on an item,
+/// and errors when it sees more.
 ///
-/// [`SingleGroup`] can only convert attributes one-to-one, and cannot combine multiple
+/// [`Single<T> where T: SingleAttributeParser`](Single) implements [`AttributeParser`].
+///
+/// [`SingleAttributeParser`] can only convert attributes one-to-one, and cannot combine multiple
 /// attributes together like is necessary for `#[stable()]` and `#[unstable()]` for example.
-pub(crate) trait SingleAttributeGroup: 'static {
+pub(crate) trait SingleAttributeParser: 'static {
     const PATH: &'static [rustc_span::Symbol];
 
     /// Caled when a duplicate attribute is found.
     ///
     /// `first_span` is the span of the first occurrence of this attribute.
-    fn on_duplicate(cx: &AttributeAcceptContext<'_>, first_span: Span);
+    // FIXME(jdonszelmann): default error
+    fn on_duplicate(cx: &AcceptContext<'_>, first_span: Span);
 
-    /// The extractor has gotten a chance to accept the attributes on an item,
-    /// now produce an attribute.
-    fn convert(cx: &AttributeAcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind>;
+    /// Converts a single syntactical attribute to a single semantic attribute, or [`AttributeKind`]
+    fn convert(cx: &AcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind>;
 }
 
-pub(crate) struct Single<T: SingleAttributeGroup>(PhantomData<T>, Option<(AttributeKind, Span)>);
+pub(crate) struct Single<T: SingleAttributeParser>(PhantomData<T>, Option<(AttributeKind, Span)>);
 
-impl<T: SingleAttributeGroup> Default for Single<T> {
+impl<T: SingleAttributeParser> Default for Single<T> {
     fn default() -> Self {
         Self(Default::default(), Default::default())
     }
 }
 
-impl<T: SingleAttributeGroup> AttributeGroup for Single<T> {
-    const ATTRIBUTES: AttributeMapping<Self> = &[(T::PATH, |group: &mut Single<T>, cx, args| {
+impl<T: SingleAttributeParser> AttributeParser for Single<T> {
+    const ATTRIBUTES: AcceptMapping<Self> = &[(T::PATH, |group: &mut Single<T>, cx, args| {
         if let Some((_, s)) = group.1 {
             T::on_duplicate(cx, s);
             return;
@@ -97,50 +102,49 @@ impl<T: SingleAttributeGroup> AttributeGroup for Single<T> {
         }
     })];
 
-    fn finalize(self, _cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+    fn finalize(self, _cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         Some(self.1?.0)
     }
 }
 
 type ConvertFn<E> = fn(ThinVec<E>) -> AttributeKind;
 
-/// A slightly simpler and more restricted way to convert attributes which you can implement for
-/// unit types. If multiple attributes appear on an element, combines the values of each into a
+/// Alternative to [`AttributeParser`] that automatically handles state management.
+/// If multiple attributes appear on an element, combines the values of each into a
 /// [`ThinVec`].
-/// [`CombineGroup<T> where T: CombineAttributeGroup`](Combine) creates an [`AttributeGroup`] from any [`CombineAttributeGroup`].
+/// [`Combine<T> where T: CombineAttributeParser`](Combine) implements [`AttributeParser`].
 ///
-/// [`CombineAttributeGroup`] can only convert a single kind of attribute, and cannot combine multiple
+/// [`CombineAttributeParser`] can only convert a single kind of attribute, and cannot combine multiple
 /// attributes together like is necessary for `#[stable()]` and `#[unstable()]` for example.
-pub(crate) trait CombineAttributeGroup: 'static {
+pub(crate) trait CombineAttributeParser: 'static {
     const PATH: &'static [rustc_span::Symbol];
 
     type Item;
     const CONVERT: ConvertFn<Self::Item>;
 
-    /// The extractor has gotten a chance to accept the attributes on an item,
-    /// now produce an attribute.
+    /// Converts a single syntactical attribute to a number of elements of the semantic attribute, or [`AttributeKind`]
     fn extend<'a>(
-        cx: &'a AttributeAcceptContext<'a>,
+        cx: &'a AcceptContext<'a>,
         args: &'a ArgParser<'a>,
     ) -> impl IntoIterator<Item = Self::Item> + 'a;
 }
 
-pub(crate) struct Combine<T: CombineAttributeGroup>(
+pub(crate) struct Combine<T: CombineAttributeParser>(
     PhantomData<T>,
-    ThinVec<<T as CombineAttributeGroup>::Item>,
+    ThinVec<<T as CombineAttributeParser>::Item>,
 );
 
-impl<T: CombineAttributeGroup> Default for Combine<T> {
+impl<T: CombineAttributeParser> Default for Combine<T> {
     fn default() -> Self {
         Self(Default::default(), Default::default())
     }
 }
 
-impl<T: CombineAttributeGroup> AttributeGroup for Combine<T> {
-    const ATTRIBUTES: AttributeMapping<Self> =
+impl<T: CombineAttributeParser> AttributeParser for Combine<T> {
+    const ATTRIBUTES: AcceptMapping<Self> =
         &[(T::PATH, |group: &mut Combine<T>, cx, args| group.1.extend(T::extend(cx, args)))];
 
-    fn finalize(self, _cx: &AttributeGroupContext<'_>) -> Option<AttributeKind> {
+    fn finalize(self, _cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         if self.1.is_empty() { None } else { Some(T::CONVERT(self.1)) }
     }
 }
