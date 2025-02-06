@@ -11,7 +11,7 @@ pub(crate) struct InlineParser;
 impl SingleAttributeParser for InlineParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::inline];
     const ATTRIBUTE_ORDER: AttributeOrder = AttributeOrder::KeepLast;
-    const ON_DUPLICATE: OnDuplicate = OnDuplicate::FutureWarn;
+    const ON_DUPLICATE: OnDuplicate = OnDuplicate::WarnButFutureError;
 
     fn convert(cx: &AcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind> {
         match args {

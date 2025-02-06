@@ -125,7 +125,7 @@ pub(crate) enum OnDuplicate {
     Warn,
 
     /// Duplicates will be a warning, with a note that this will be an error in the future.
-    FutureWarn,
+    WarnButFutureError,
 
     /// Give a default error
     Error,
@@ -151,7 +151,7 @@ impl OnDuplicate {
             OnDuplicate::Warn => {
                 todo!()
             },
-            OnDuplicate::FutureWarn => {
+            OnDuplicate::WarnButFutureError => {
                 todo!()
             },
             OnDuplicate::Error => {
