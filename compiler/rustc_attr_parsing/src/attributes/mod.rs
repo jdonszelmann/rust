@@ -133,6 +133,43 @@ impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     }
 }
 
+pub(crate) enum OnDuplicate {
+    /// Give a default warning
+    Warn,
+
+    /// Give a default error
+    Error,
+
+    /// Ignore duplicates
+    Ignore,
+
+    /// Custom function called when a duplicate attribute is found.
+    ///
+    /// - `unused` is the span of the attribute that was unused or bad because of some
+    ///   duplicate reason (see [`AttributeDuplicates`])
+    /// - `used` is the span of the attribute that was used in favor of the unused attribute
+    Custom(fn (cx: &AcceptContext<'_>, used: Span, unused: Span))
+}
+
+impl OnDuplicate {
+    fn exec<P: SingleAttributeParser>(&self, cx: &AcceptContext<'_>, used: Span, unused: Span) {
+        match self {
+            OnDuplicate::Warn => {
+                todo!()
+            },
+            OnDuplicate::Error => {
+                cx.emit_err(UnusedMultiple {
+                    this: used,
+                    other: unused,
+                    name: Symbol::intern(&P::PATH.into_iter().map(|i| i.to_string()).collect::<Vec<_>>().join("..")),
+                });
+            },
+            OnDuplicate::Ignore => {}
+            OnDuplicate::Custom(f) => f(cx, used, unused),
+        }
+    }
+}
+
 pub(crate) enum AttributeDuplicates {
     /// Duplicates after the first attribute will be an error.
     ///
