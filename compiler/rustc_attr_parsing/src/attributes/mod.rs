@@ -75,6 +75,8 @@ pub(crate) trait AttributeParser: Default + 'static {
 pub(crate) trait SingleAttributeParser: 'static {
     const PATH: &'static [rustc_span::Symbol];
 
+    const REJECT_DUPLICATE_STRATEGY: RejectDuplicateStrategy = RejectDuplicateStrategy::ErrorAfterFirst;
+
     /// Caled when a duplicate attribute is found.
     ///
     /// `first_span` is the span of the first occurrence of this attribute.
@@ -108,6 +110,10 @@ impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     fn finalize(self, _cx: &FinalizeContext<'_>) -> Option<AttributeKind> {
         Some(self.1?.0)
     }
+}
+
+pub(crate) enum RejectDuplicateStrategy {
+    ErrorAfterFirst,
 }
 
 type ConvertFn<E> = fn(ThinVec<E>) -> AttributeKind;
