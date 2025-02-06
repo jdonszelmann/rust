@@ -17,11 +17,12 @@
 use std::marker::PhantomData;
 
 use rustc_attr_data_structures::AttributeKind;
-use rustc_span::Span;
+use rustc_span::{Span, Symbol};
 use thin_vec::ThinVec;
 
 use crate::context::{AcceptContext, FinalizeContext};
 use crate::parser::ArgParser;
+use crate::session_diagnostics::UnusedMultiple;
 
 pub(crate) mod allow_unstable;
 pub(crate) mod cfg;
@@ -81,7 +82,13 @@ pub(crate) trait SingleAttributeParser: 'static {
     ///
     /// `first_span` is the span of the first occurrence of this attribute.
     // FIXME(jdonszelmann): default error
-    fn on_duplicate(cx: &AcceptContext<'_>, first_span: Span);
+    fn on_duplicate(cx: &AcceptContext<'_>, first_span: Span) {
+        cx.emit_err(UnusedMultiple {
+            this: cx.attr_span,
+            other: first_span,
+            name: Symbol::intern(&Self::PATH.into_iter().map(|i| i.to_string()).collect::<Vec<_>>().join("..")),
+        });
+    }
 
     /// Converts a single syntactical attribute to a single semantic attribute, or [`AttributeKind`]
     fn convert(cx: &AcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind>;
