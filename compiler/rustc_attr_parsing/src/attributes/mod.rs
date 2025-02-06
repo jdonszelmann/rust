@@ -104,9 +104,13 @@ impl<T: SingleAttributeParser> Default for Single<T> {
 
 impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     const ATTRIBUTES: AcceptMapping<Self> = &[(T::PATH, |group: &mut Single<T>, cx, args| {
-        if let Some((_, s)) = group.1 {
-            T::on_duplicate(cx, s);
-            return;
+        match T::REJECT_DUPLICATE_STRATEGY {
+            RejectDuplicateStrategy::ErrorAfterFirst => {
+                if let Some((_, s)) = group.1 {
+                    T::on_duplicate(cx, s);
+                    return;
+                }
+            },
         }
 
         if let Some(pa) = T::convert(cx, args) {
