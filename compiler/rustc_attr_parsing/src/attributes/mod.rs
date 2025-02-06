@@ -76,7 +76,7 @@ pub(crate) trait AttributeParser: Default + 'static {
 pub(crate) trait SingleAttributeParser: 'static {
     const PATH: &'static [rustc_span::Symbol];
 
-    const REJECT_DUPLICATE_STRATEGY: RejectDuplicateStrategy = RejectDuplicateStrategy::ErrorAfterFirst;
+    const ON_DUPLICATE_STRATEGY: AttributeDuplicates = AttributeDuplicates::ErrorFollowing;
 
     /// Caled when a duplicate attribute is found.
     ///
@@ -104,8 +104,8 @@ impl<T: SingleAttributeParser> Default for Single<T> {
 
 impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     const ATTRIBUTES: AcceptMapping<Self> = &[(T::PATH, |group: &mut Single<T>, cx, args| {
-        match T::REJECT_DUPLICATE_STRATEGY {
-            RejectDuplicateStrategy::ErrorAfterFirst => {
+        match T::ON_DUPLICATE_STRATEGY {
+            AttributeDuplicates::ErrorFollowing => {
                 if let Some((_, s)) = group.1 {
                     T::on_duplicate(cx, s);
                     return;
@@ -123,8 +123,8 @@ impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     }
 }
 
-pub(crate) enum RejectDuplicateStrategy {
-    ErrorAfterFirst,
+pub(crate) enum AttributeDuplicates {
+    ErrorFollowing,
 }
 
 type ConvertFn<E> = fn(ThinVec<E>) -> AttributeKind;
