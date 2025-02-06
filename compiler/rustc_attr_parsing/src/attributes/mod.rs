@@ -76,7 +76,7 @@ pub(crate) trait AttributeParser: Default + 'static {
 pub(crate) trait SingleAttributeParser: 'static {
     const PATH: &'static [rustc_span::Symbol];
 
-    const ON_DUPLICATE_STRATEGY: AttributeDuplicates = AttributeDuplicates::ErrorFollowing;
+    const ON_DUPLICATE_STRATEGY: AttributeDuplicates;
 
     /// Caled when a duplicate attribute is found.
     ///
