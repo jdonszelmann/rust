@@ -80,12 +80,14 @@ pub(crate) trait SingleAttributeParser: 'static {
 
     /// Caled when a duplicate attribute is found.
     ///
-    /// `first_span` is the span of the first occurrence of this attribute.
+    /// - `unused` is the span of the attribute that was unused or bad because of some
+    ///   duplicate reason (see [`AttributeDuplicates`])
+    /// - `used` is the span of the attribute that was used in favor of the unused attribute
     // FIXME(jdonszelmann): default error
-    fn on_duplicate(cx: &AcceptContext<'_>, first_span: Span) {
+    fn on_duplicate(cx: &AcceptContext<'_>, used: Span, unused: Span) {
         cx.emit_err(UnusedMultiple {
-            this: cx.attr_span,
-            other: first_span,
+            this: used,
+            other: unused,
             name: Symbol::intern(&Self::PATH.into_iter().map(|i| i.to_string()).collect::<Vec<_>>().join("..")),
         });
     }
@@ -104,16 +106,24 @@ impl<T: SingleAttributeParser> Default for Single<T> {
 
 impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     const ATTRIBUTES: AcceptMapping<Self> = &[(T::PATH, |group: &mut Single<T>, cx, args| {
-        match T::ON_DUPLICATE_STRATEGY {
-            AttributeDuplicates::ErrorFollowing => {
-                if let Some((_, s)) = group.1 {
-                    T::on_duplicate(cx, s);
-                    return;
-                }
-            },
-        }
-
         if let Some(pa) = T::convert(cx, args) {
+            match T::ON_DUPLICATE_STRATEGY {
+                // keep the first and error
+                AttributeDuplicates::ErrorFollowing => {
+                    if let Some((_, unused)) = group.1 {
+                        T::on_duplicate(cx,cx.attr_span, unused);
+                        return;
+                    }
+                },
+                // keep the new one and warn about the previous,
+                // then replace
+                AttributeDuplicates::FutureWarnPreceding => {
+                    if let Some((_, used)) = group.1 {
+                        T::on_duplicate(cx, used, cx.attr_span);
+                    }
+                },
+            }
+
             group.1 = Some((pa, cx.attr_span));
         }
     })];
@@ -124,7 +134,20 @@ impl<T: SingleAttributeParser> AttributeParser for Single<T> {
 }
 
 pub(crate) enum AttributeDuplicates {
+    /// Duplicates after the first attribute will be an error.
+    ///
+    /// This should be used where duplicates would be ignored, but carry extra
+    /// meaning that could cause confusion. For example, `#[stable(since="1.0")]
+    /// #[stable(since="2.0")]`, which version should be used for `stable`?
     ErrorFollowing,
+
+    /// Duplicates preceding the last instance of the attribute will be a
+    /// warning, with a note that this will be an error in the future.
+    ///
+    /// This is the same as `FutureWarnFollowing`, except the last attribute is
+    /// the one that is "used". Ideally these can eventually migrate to
+    /// `ErrorPreceding`.
+    FutureWarnPreceding,
 }
 
 type ConvertFn<E> = fn(ThinVec<E>) -> AttributeKind;
