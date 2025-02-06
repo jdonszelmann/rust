@@ -149,10 +149,10 @@ impl OnDuplicate {
     fn exec<P: SingleAttributeParser>(&self, cx: &AcceptContext<'_>, used: Span, unused: Span) {
         match self {
             OnDuplicate::Warn => {
-                todo!()
+                // todo!()
             },
             OnDuplicate::WarnButFutureError => {
-                todo!()
+                // todo!()
             },
             OnDuplicate::Error => {
                 cx.emit_err(UnusedMultiple {

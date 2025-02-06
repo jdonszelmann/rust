@@ -15,16 +15,16 @@ impl SingleAttributeParser for InlineParser {
 
     fn convert(cx: &AcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind> {
         match args {
-            ArgParser::NoArgs => Some(AttributeKind::Inline(InlineAttr::Hint)),
+            ArgParser::NoArgs => Some(AttributeKind::Inline(InlineAttr::Hint, cx.attr_span)),
             ArgParser::List(list) => {
                 let Some(l) = list.single()  else {
                     struct_span_code_err!(cx.dcx(), cx.attr_span, E0534, "expected one argument").emit();
                     return None;
                 };
 
-                match l.lit().and_then(|i| i.value_str()) {
-                    Some(sym::always) => Some(AttributeKind::Inline(InlineAttr::Always)),
-                    Some(sym::never) => Some(AttributeKind::Inline(InlineAttr::Never)),
+                match l.meta_item().and_then(|i| i.word_without_args().map(|i| i.name)) {
+                    Some(sym::always) => Some(AttributeKind::Inline(InlineAttr::Always, cx.attr_span)),
+                    Some(sym::never) => Some(AttributeKind::Inline(InlineAttr::Never, cx.attr_span)),
                     _ => {
                         struct_span_code_err!(cx.dcx(), l.span(), E0535, "invalid argument")
                             .with_help("valid inline arguments are `always` and `never`")
@@ -34,8 +34,12 @@ impl SingleAttributeParser for InlineParser {
                 }
             },
             ArgParser::NameValue(_) => {
-                todo!()
+                // silently ignored, we warn somewhere else.
+                // FIXME(jdonszelmann): that warning *should* go here.
+                None
             },
         }
     }
 }
+
+
