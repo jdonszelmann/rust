@@ -76,7 +76,7 @@ pub(crate) trait AttributeParser: Default + 'static {
 pub(crate) trait SingleAttributeParser: 'static {
     const PATH: &'static [rustc_span::Symbol];
 
-    const ON_DUPLICATE_STRATEGY: AttributeDuplicates;
+    const ATTRIBUTE_ORDER: AttributeOrder;
     const ON_DUPLICATE: OnDuplicate;
 
     /// Converts a single syntactical attribute to a single semantic attribute, or [`AttributeKind`]
@@ -94,9 +94,9 @@ impl<T: SingleAttributeParser> Default for Single<T> {
 impl<T: SingleAttributeParser> AttributeParser for Single<T> {
     const ATTRIBUTES: AcceptMapping<Self> = &[(T::PATH, |group: &mut Single<T>, cx, args| {
         if let Some(pa) = T::convert(cx, args) {
-            match T::ON_DUPLICATE_STRATEGY {
-                // keep the first and error
-                AttributeDuplicates::ErrorFollowing => {
+            match T::ATTRIBUTE_ORDER {
+                // keep the first and report immediately. ignore this attribute
+                AttributeOrder::KeepFirst => {
                     if let Some((_, unused)) = group.1 {
                         T::ON_DUPLICATE.exec::<T>(cx, cx.attr_span, unused);
                         return;
@@ -104,7 +104,7 @@ impl<T: SingleAttributeParser> AttributeParser for Single<T> {
                 },
                 // keep the new one and warn about the previous,
                 // then replace
-                AttributeDuplicates::FutureWarnPreceding => {
+                AttributeOrder::KeepLast => {
                     if let Some((_, used)) = group.1 {
                         T::ON_DUPLICATE.exec::<T>(cx, used, cx.attr_span);
                     }
@@ -124,10 +124,17 @@ pub(crate) enum OnDuplicate {
     /// Give a default warning
     Warn,
 
+    /// Duplicates will be a warning, with a note that this will be an error in the future.
+    FutureWarn,
+
     /// Give a default error
     Error,
 
     /// Ignore duplicates
+    ///
+    /// This should be used where duplicates would be ignored, but carry extra
+    /// meaning that could cause confusion. For example, `#[stable(since="1.0")]
+    /// #[stable(since="2.0")]`, which version should be used for `stable`?
     Ignore,
 
     /// Custom function called when a duplicate attribute is found.
@@ -144,6 +151,9 @@ impl OnDuplicate {
             OnDuplicate::Warn => {
                 todo!()
             },
+            OnDuplicate::FutureWarn => {
+                todo!()
+            },
             OnDuplicate::Error => {
                 cx.emit_err(UnusedMultiple {
                     this: used,
@@ -157,21 +167,14 @@ impl OnDuplicate {
     }
 }
 
-pub(crate) enum AttributeDuplicates {
-    /// Duplicates after the first attribute will be an error.
-    ///
-    /// This should be used where duplicates would be ignored, but carry extra
-    /// meaning that could cause confusion. For example, `#[stable(since="1.0")]
-    /// #[stable(since="2.0")]`, which version should be used for `stable`?
-    ErrorFollowing,
+pub(crate) enum AttributeOrder {
+    /// The first attribute is kept, and any duplicates after that are
+    /// handled according to the [duplicate strategy](SingleAttributeParser::ON_DUPLICATE)
+    KeepFirst,
 
-    /// Duplicates preceding the last instance of the attribute will be a
-    /// warning, with a note that this will be an error in the future.
-    ///
-    /// This is the same as `FutureWarnFollowing`, except the last attribute is
-    /// the one that is "used". Ideally these can eventually migrate to
-    /// `ErrorPreceding`.
-    FutureWarnPreceding,
+    /// The last attribute is kept, and any duplicates already seen earlier are
+    /// handled according to the [duplicate strategy](SingleAttributeParser::ON_DUPLICATE)
+    KeepLast,
 }
 
 type ConvertFn<E> = fn(ThinVec<E>) -> AttributeKind;

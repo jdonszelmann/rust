@@ -8,7 +8,7 @@ use rustc_errors::ErrorGuaranteed;
 use rustc_span::{Span, Symbol, kw, sym};
 
 use super::util::parse_version;
-use super::{AcceptMapping, AttributeDuplicates, AttributeParser, OnDuplicate, SingleAttributeParser};
+use super::{AcceptMapping, AttributeOrder, AttributeParser, OnDuplicate, SingleAttributeParser};
 use crate::context::{AcceptContext, FinalizeContext};
 use crate::parser::{ArgParser, MetaItemParser};
 use crate::session_diagnostics::{self, UnsupportedLiteralReason};
@@ -122,7 +122,7 @@ pub(crate) struct ConstStabilityIndirectParser;
 // FIXME(jdonszelmann): single word attribute group when we have these
 impl SingleAttributeParser for ConstStabilityIndirectParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::rustc_const_stable_indirect];
-    const ON_DUPLICATE_STRATEGY: AttributeDuplicates = AttributeDuplicates::ErrorFollowing;
+    const ATTRIBUTE_ORDER: AttributeOrder = AttributeOrder::KeepFirst;
     const ON_DUPLICATE: OnDuplicate = OnDuplicate::Ignore;
 
     fn convert(_cx: &AcceptContext<'_>, _args: &ArgParser<'_>) -> Option<AttributeKind> {

@@ -2,7 +2,7 @@ use rustc_attr_data_structures::{AttributeKind, DeprecatedSince, Deprecation};
 use rustc_span::symbol::Ident;
 use rustc_span::{Span, Symbol, sym};
 
-use super::{AttributeDuplicates, OnDuplicate, SingleAttributeParser};
+use super::{AttributeOrder, OnDuplicate, SingleAttributeParser};
 use super::util::parse_version;
 use crate::context::AcceptContext;
 use crate::parser::ArgParser;
@@ -47,7 +47,7 @@ fn get(
 
 impl SingleAttributeParser for DeprecationParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::deprecated];
-    const ON_DUPLICATE_STRATEGY: AttributeDuplicates = AttributeDuplicates::ErrorFollowing;
+    const ATTRIBUTE_ORDER: AttributeOrder = AttributeOrder::KeepFirst;
     const ON_DUPLICATE: OnDuplicate = OnDuplicate::Error;
 
     fn convert(cx: &AcceptContext<'_>, args: &ArgParser<'_>) -> Option<AttributeKind> {

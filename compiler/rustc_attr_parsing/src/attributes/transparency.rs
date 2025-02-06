@@ -2,7 +2,7 @@ use rustc_attr_data_structures::AttributeKind;
 use rustc_span::{hygiene::Transparency, Span};
 use rustc_span::sym;
 
-use super::{AcceptContext, AttributeDuplicates, OnDuplicate, SingleAttributeParser};
+use super::{AcceptContext, AttributeOrder, OnDuplicate, SingleAttributeParser};
 use crate::parser::ArgParser;
 
 pub(crate) struct TransparencyParser;
@@ -12,7 +12,7 @@ pub(crate) struct TransparencyParser;
 #[allow(rustc::diagnostic_outside_of_impl)]
 impl SingleAttributeParser for TransparencyParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::rustc_macro_transparency];
-    const ON_DUPLICATE_STRATEGY: AttributeDuplicates = AttributeDuplicates::ErrorFollowing;
+    const ATTRIBUTE_ORDER: AttributeOrder = AttributeOrder::KeepFirst;
     const ON_DUPLICATE: OnDuplicate = OnDuplicate::Custom(|cx, used, unused| {
         cx.dcx().span_err(vec![used, unused], "multiple macro transparency attributes");
     });
