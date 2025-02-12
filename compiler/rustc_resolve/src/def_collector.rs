@@ -145,6 +145,7 @@ impl<'a, 'ra, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'ra, 'tcx> {
                 let attrs = parser.parse_attribute_list(
                     &i.attrs,
                     i.span,
+                    i.id,
                     OmitDoc::Skip,
                     std::convert::identity,
                 );

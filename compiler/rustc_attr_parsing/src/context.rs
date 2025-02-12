@@ -3,11 +3,12 @@ use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::LazyLock;
 
-use rustc_ast::{self as ast, DelimArgs};
+use rustc_ast::{self as ast, node_id, DelimArgs};
 use rustc_attr_data_structures::AttributeKind;
 use rustc_errors::{DiagCtxtHandle, Diagnostic};
 use rustc_feature::Features;
 use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId};
+use rustc_session::lint::{BuiltinLintDiag, Lint};
 use rustc_session::Session;
 use rustc_span::symbol::kw;
 use rustc_span::{DUMMY_SP, ErrorGuaranteed, Span, Symbol, sym};
@@ -23,6 +24,7 @@ use crate::attributes::stability::{
 use crate::attributes::transparency::TransparencyParser;
 use crate::attributes::{AttributeParser as _, Combine, Single};
 use crate::parser::{ArgParser, MetaItemParser};
+use rustc_ast::NodeId;
 
 macro_rules! attribute_groups {
     (
@@ -101,6 +103,17 @@ impl<'a> AcceptContext<'a> {
             self.dcx().emit_err(diag)
         }
     }
+
+    pub(crate) fn emit_lint(&self, lint: &'static Lint, span: Span, diagnostic: BuiltinLintDiag) {
+        if !self.limit_diagnostics {
+            self.sess().psess.buffer_lint(
+                lint,
+                span,
+                self.target_node_id,
+                diagnostic,
+            );
+        }
+    }
 }
 
 impl<'a> Deref for AcceptContext<'a> {
@@ -120,6 +133,8 @@ pub(crate) struct FinalizeContext<'a> {
     pub(crate) cx: &'a AttributeParser<'a>,
     /// The span of the syntactical component this attribute was applied to
     pub(crate) target_span: Span,
+    /// The node id (in the ast) of the syntactical component this attribute was applied to
+    pub(crate) target_node_id: NodeId,
 }
 
 impl<'a> Deref for FinalizeContext<'a> {
@@ -171,6 +186,7 @@ impl<'sess> AttributeParser<'sess> {
         attrs: &[ast::Attribute],
         sym: Symbol,
         target_span: Span,
+        target_node_id: NodeId,
         limit_diagnostics: bool,
     ) -> Option<Attribute> {
         let mut parsed = Self {
@@ -180,7 +196,7 @@ impl<'sess> AttributeParser<'sess> {
             parse_only: Some(sym),
             limit_diagnostics,
         }
-        .parse_attribute_list(attrs, target_span, OmitDoc::Skip, std::convert::identity);
+        .parse_attribute_list(attrs, target_span, target_node_id, OmitDoc::Skip, std::convert::identity);
 
         assert!(parsed.len() <= 1);
 
@@ -211,13 +227,14 @@ impl<'sess> AttributeParser<'sess> {
         &'a self,
         attrs: &'a [ast::Attribute],
         target_span: Span,
+        target_node_id: NodeId,
         omit_doc: OmitDoc,
 
         lower_span: impl Copy + Fn(Span) -> Span,
     ) -> Vec<Attribute> {
         let mut attributes = Vec::new();
 
-        let group_cx = FinalizeContext { cx: self, target_span };
+        let group_cx = FinalizeContext { cx: self, target_span, target_node_id };
 
         for attr in attrs {
             // if we're only looking for a single attribute,
