@@ -44,6 +44,7 @@ use rustc_errors::emitter::stderr_destination;
 use rustc_errors::registry::Registry;
 use rustc_errors::{ColorConfig, DiagCtxt, ErrCode, FatalError, PResult, markdown};
 use rustc_feature::find_gated_cfg;
+use rustc_interface::passes::get_crate_name;
 use rustc_interface::util::{self, get_codegen_backend};
 use rustc_interface::{Linker, create_and_enter_global_ctxt, interface, passes};
 use rustc_lint::unerased_lint_store;
@@ -667,7 +668,8 @@ fn print_crate_info(
                     return Compilation::Continue;
                 };
                 let t_outputs = rustc_interface::util::build_output_filenames(attrs, sess);
-                let crate_name = passes::get_crate_name(sess, attrs);
+                let crate_name = get_crate_name(sess, attrs);
+
                 let crate_types = collect_crate_types(sess, attrs);
                 for &style in &crate_types {
                     let fname = rustc_session::output::filename_for_input(
@@ -681,7 +683,7 @@ fn print_crate_info(
                     // no crate attributes, print out an error and exit
                     return Compilation::Continue;
                 };
-                println_info!("{}", passes::get_crate_name(sess, attrs));
+                println_info!("{}", get_crate_name(sess, attrs));
             }
             Cfg => {
                 let mut cfgs = sess
