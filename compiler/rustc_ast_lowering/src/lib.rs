@@ -187,7 +187,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             // interact with `gen`/`async gen` blocks
             allow_async_iterator: [sym::gen_future, sym::async_iterator].into(),
 
-            attribute_parser: AttributeParser::new(tcx.sess, tcx.features(), registered_tools),
+            attribute_parser: AttributeParser::new(tcx, tcx.features(), registered_tools),
         }
     }
 
@@ -870,7 +870,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         if attrs.is_empty() {
             &[]
         } else {
-            let lowered_attrs = self.lower_attrs_vec(attrs, self.lower_span(target_span));
+            let lowered_attrs = self.lower_attrs_vec(attrs, self.lower_span(target_span), id);
 
             debug_assert_eq!(id.owner, self.current_hir_id_owner);
             let ret = self.arena.alloc_from_iter(lowered_attrs);
@@ -890,9 +890,19 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         }
     }
 
-    fn lower_attrs_vec(&self, attrs: &[Attribute], target_span: Span) -> Vec<hir::Attribute> {
-        self.attribute_parser
-            .parse_attribute_list(attrs, target_span, OmitDoc::Lower, |s| self.lower_span(s))
+    fn lower_attrs_vec(
+        &self,
+        attrs: &[Attribute],
+        target_span: Span,
+        target_hir_id: HirId,
+    ) -> Vec<hir::Attribute> {
+        self.attribute_parser.parse_attribute_list(
+            attrs,
+            target_span,
+            target_hir_id,
+            OmitDoc::Lower,
+            |s| self.lower_span(s),
+        )
     }
 
     fn alias_attrs(&mut self, id: HirId, target_id: HirId) {
