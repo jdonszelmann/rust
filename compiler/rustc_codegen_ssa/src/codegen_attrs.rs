@@ -6,7 +6,7 @@ use rustc_ast::expand::autodiff_attrs::{
 };
 use rustc_ast::{MetaItem, MetaItemInner, attr};
 use rustc_attr_parsing::ReprAttr::ReprAlign;
-use rustc_attr_parsing::{find_attr, AttributeKind, InlineAttr, InstructionSetAttr, OptimizeAttr};
+use rustc_attr_parsing::{AttributeKind, InlineAttr, InstructionSetAttr, OptimizeAttr, find_attr};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::codes::*;
 use rustc_errors::{DiagMessage, SubdiagMessage, struct_span_code_err};
@@ -518,7 +518,8 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
 
     mixed_export_name_no_mangle_lint_state.lint_if_mixed(tcx);
 
-    codegen_fn_attrs.inline = find_attr!(attrs, AttributeKind::Inline(i, _) => *i).unwrap_or(InlineAttr::None);
+    codegen_fn_attrs.inline =
+        find_attr!(attrs, AttributeKind::Inline(i, _) => *i).unwrap_or(InlineAttr::None);
 
     // naked function MUST NOT be inlined! This attribute is required for the rust compiler itself,
     // but not for the code generation backend because at that point the naked function will just be

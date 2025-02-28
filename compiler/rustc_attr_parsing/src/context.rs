@@ -3,13 +3,15 @@ use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::LazyLock;
 
-use rustc_ast::{self as ast, node_id, DelimArgs};
+use private::Sealed;
+use rustc_ast::{self as ast, DelimArgs, NodeId};
 use rustc_attr_data_structures::AttributeKind;
-use rustc_errors::{DiagCtxtHandle, Diagnostic};
+use rustc_errors::{DiagCtxtHandle, Diagnostic, LintDiagnostic};
 use rustc_feature::Features;
-use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId};
-use rustc_session::lint::{BuiltinLintDiag, Lint};
+use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId, HirId};
+use rustc_middle::ty::TyCtxt;
 use rustc_session::Session;
+use rustc_session::lint::Lint;
 use rustc_span::symbol::kw;
 use rustc_span::{DUMMY_SP, ErrorGuaranteed, Span, Symbol, sym};
 
@@ -24,18 +26,41 @@ use crate::attributes::stability::{
 use crate::attributes::transparency::TransparencyParser;
 use crate::attributes::{AttributeParser as _, Combine, Single};
 use crate::parser::{ArgParser, MetaItemParser};
-use rustc_ast::NodeId;
+
+macro_rules! group_type {
+    ($stage: ty) => {
+         LazyLock<(
+            BTreeMap<&'static [Symbol], Vec<Box<dyn for<'sess, 'a> Fn(&AcceptContext<'_, 'sess, $stage>, &ArgParser<'a>) + Send + Sync>>>,
+            Vec<Box<dyn Send + Sync + Fn(&FinalizeContext<'_, '_, $stage>) -> Option<AttributeKind>>>
+        )>
+    };
+}
 
 macro_rules! attribute_groups {
     (
         pub(crate) static $name: ident = [$($names: ty),* $(,)?];
     ) => {
-        pub(crate) static $name: LazyLock<(
-            BTreeMap<&'static [Symbol], Vec<Box<dyn Fn(&AcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>,
-            Vec<Box<dyn Send + Sync + Fn(&FinalizeContext<'_>) -> Option<AttributeKind>>>
-        )> = LazyLock::new(|| {
-            let mut accepts = BTreeMap::<_, Vec<Box<dyn Fn(&AcceptContext<'_>, &ArgParser<'_>) + Send + Sync>>>::new();
-            let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&FinalizeContext<'_>) -> Option<AttributeKind>>>::new();
+        mod early {
+            use super::*;
+            type Combine<T> = super::Combine<T, Early>;
+            type Single<T> = super::Single<T, Early>;
+
+            attribute_groups!(@[Early] pub(crate) static $name = [$($names),*];);
+        }
+        mod late {
+            use super::*;
+            type Combine<T> = super::Combine<T, Late>;
+            type Single<T> = super::Single<T, Late>;
+
+            attribute_groups!(@[Late] pub(crate) static $name = [$($names),*];);
+        }
+    };
+    (
+        @[$ty: ty] pub(crate) static $name: ident = [$($names: ty),* $(,)?];
+    ) => {
+        pub(crate) static $name: group_type!($ty) = LazyLock::new(|| {
+            let mut accepts = BTreeMap::<_, Vec<Box<dyn for<'sess, 'a> Fn(&AcceptContext<'_, 'sess, $ty>, &ArgParser<'a>) + Send + Sync>>>::new();
+            let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&FinalizeContext<'_, '_, $ty>) -> Option<AttributeKind>>>::new();
             $(
                 {
                     thread_local! {
@@ -61,7 +86,6 @@ macro_rules! attribute_groups {
         });
     };
 }
-
 attribute_groups!(
     pub(crate) static ATTRIBUTE_MAPPING = [
         // tidy-alphabetical-start
@@ -86,38 +110,114 @@ attribute_groups!(
     ];
 );
 
+mod private {
+    pub trait Sealed {}
+    impl Sealed for super::Early {}
+    impl Sealed for super::Late {}
+}
+
+// allow because it's a sealed trait
+#[allow(private_interfaces)]
+pub trait Stage: Sized + 'static + Sealed {
+    type Id: Copy;
+    type Sess<'sess>;
+    fn parsers() -> &'static group_type!(Self);
+
+    fn sess<'short, 'sess: 'short>(s: &Self::Sess<'sess>) -> &'short Session;
+    fn emit_err<'sess>(
+        sess: &Self::Sess<'sess>,
+        diag: impl for<'x> Diagnostic<'x>,
+    ) -> ErrorGuaranteed;
+    fn emit_lint<'sess>(
+        _sess: &Self::Sess<'sess>,
+        _lint: &'static Lint,
+        _id: Self::Id,
+        _span: Span,
+        _diag: impl for<'x> LintDiagnostic<'x, ()>,
+    ) {
+    }
+}
+
+// allow because it's a sealed trait
+#[allow(private_interfaces)]
+impl Stage for Early {
+    type Id = NodeId;
+    type Sess<'sess> = &'sess Session;
+
+    fn parsers() -> &'static group_type!(Self) {
+        &early::ATTRIBUTE_MAPPING
+    }
+    fn sess<'short, 'sess: 'short>(s: &Self::Sess<'sess>) -> &'short Session {
+        s
+    }
+    fn emit_err<'sess>(
+        sess: &Self::Sess<'sess>,
+        diag: impl for<'x> Diagnostic<'x>,
+    ) -> ErrorGuaranteed {
+        sess.dcx().create_err(diag).delay_as_bug()
+    }
+}
+
+// allow because it's a sealed trait
+#[allow(private_interfaces)]
+impl Stage for Late {
+    type Id = HirId;
+    type Sess<'sess> = TyCtxt<'sess>;
+
+    fn parsers() -> &'static group_type!(Self) {
+        &late::ATTRIBUTE_MAPPING
+    }
+    fn sess<'short, 'sess: 'short>(tcx: &Self::Sess<'sess>) -> &'short Session {
+        &tcx.sess
+    }
+    fn emit_err<'sess>(
+        tcx: &Self::Sess<'sess>,
+        diag: impl for<'x> Diagnostic<'x>,
+    ) -> ErrorGuaranteed {
+        tcx.dcx().emit_err(diag)
+    }
+    fn emit_lint<'sess>(
+        tcx: &TyCtxt<'sess>,
+        lint: &'static Lint,
+        hir_id: HirId,
+        span: Span,
+        diag: impl for<'x> LintDiagnostic<'x, ()>,
+    ) {
+        tcx.emit_node_span_lint(lint, hir_id, span, diag);
+    }
+}
+
+/// used when parsing attributes for miscelaneous things *before* ast lowering
+pub struct Early;
+/// used when parsing attributes during ast lowering
+pub struct Late;
+
 /// Context given to every attribute parser when accepting
 ///
 /// Gives [`AttributeParser`]s enough information to create errors, for example.
-pub(crate) struct AcceptContext<'a> {
-    pub(crate) group_cx: &'a FinalizeContext<'a>,
+pub(crate) struct AcceptContext<'f, 'sess, S: Stage> {
+    pub(crate) group_cx: &'f FinalizeContext<'f, 'sess, S>,
     /// The span of the attribute currently being parsed
     pub(crate) attr_span: Span,
 }
 
-impl<'a> AcceptContext<'a> {
-    pub(crate) fn emit_err(&self, diag: impl Diagnostic<'a>) -> ErrorGuaranteed {
-        if self.limit_diagnostics {
-            self.dcx().create_err(diag).delay_as_bug()
-        } else {
-            self.dcx().emit_err(diag)
-        }
+impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
+    pub(crate) fn emit_err(&self, diag: impl for<'x> Diagnostic<'x>) -> ErrorGuaranteed {
+        S::emit_err(&self.sess, diag)
     }
 
-    pub(crate) fn emit_lint(&self, lint: &'static Lint, span: Span, diagnostic: BuiltinLintDiag) {
-        if !self.limit_diagnostics {
-            self.sess().psess.buffer_lint(
-                lint,
-                span,
-                self.target_node_id,
-                diagnostic,
-            );
-        }
+    pub(crate) fn emit_lint(
+        &self,
+        lint: &'static Lint,
+        span: Span,
+        diag: impl for<'x> LintDiagnostic<'x, ()>,
+    ) {
+        S::emit_lint(&self.sess, lint, self.target_id, span, diag);
     }
 }
 
-impl<'a> Deref for AcceptContext<'a> {
-    type Target = FinalizeContext<'a>;
+impl<'f, 'sess, S: Stage> Deref for AcceptContext<'f, 'sess, S> {
+    type Target = FinalizeContext<'f, 'sess, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.group_cx
@@ -127,21 +227,21 @@ impl<'a> Deref for AcceptContext<'a> {
 /// Context given to every attribute parser during finalization.
 ///
 /// Gives [`AttributeParser`](crate::attributes::AttributeParser)s enough information to create errors, for example.
-pub(crate) struct FinalizeContext<'a> {
+pub(crate) struct FinalizeContext<'p, 'sess, S: Stage> {
     /// The parse context, gives access to the session and the
     /// diagnostics context.
-    pub(crate) cx: &'a AttributeParser<'a>,
+    pub(crate) cx: &'p AttributeParser<'sess, S>,
     /// The span of the syntactical component this attribute was applied to
     pub(crate) target_span: Span,
-    /// The node id (in the ast) of the syntactical component this attribute was applied to
-    pub(crate) target_node_id: NodeId,
+    /// The id ([`NodeId`] if `S` is `Early`, [`HirId`] if `S` is `Late`) of the syntactical component this attribute was applied to
+    pub(crate) target_id: S::Id,
 }
 
-impl<'a> Deref for FinalizeContext<'a> {
-    type Target = AttributeParser<'a>;
+impl<'p, 'sess: 'p, S: Stage> Deref for FinalizeContext<'p, 'sess, S> {
+    type Target = AttributeParser<'sess, S>;
 
     fn deref(&self) -> &Self::Target {
-        &self.cx
+        self.cx
     }
 }
 
@@ -153,24 +253,20 @@ pub enum OmitDoc {
 
 /// Context created once, for example as part of the ast lowering
 /// context, through which all attributes can be lowered.
-pub struct AttributeParser<'sess> {
+pub struct AttributeParser<'sess, S: Stage = Late> {
     #[expect(dead_code)] // FIXME(jdonszelmann): needed later to verify we parsed all attributes
     tools: Vec<Symbol>,
-    sess: &'sess Session,
     features: Option<&'sess Features>,
+    sess: S::Sess<'sess>,
 
     /// *only* parse attributes with this symbol.
     ///
     /// Used in cases where we want the lowering infrastructure for
     /// parse just a single attribute.
     parse_only: Option<Symbol>,
-
-    /// Can be used to instruct parsers to reduce the number of diagnostics it emits.
-    /// Useful when using `parse_limited` and you know the attr will be reparsed later.
-    pub(crate) limit_diagnostics: bool,
 }
 
-impl<'sess> AttributeParser<'sess> {
+impl<'sess> AttributeParser<'sess, Early> {
     /// This method allows you to parse attributes *before* you have access to features or tools.
     /// One example where this is necessary, is to parse `feature` attributes themselves for
     /// example.
@@ -181,34 +277,45 @@ impl<'sess> AttributeParser<'sess> {
     ///
     /// To make sure use is limited, supply a `Symbol` you'd like to parse. Only attributes with
     /// that symbol are picked out of the list of instructions and parsed. Those are returned.
+    ///
+    /// No diagnostics will be emitted when parsing limited. Lints are not emitted at all, while
+    /// errors will be emitted as a delayed bugs. in other words, we *expect* attributes parsed
+    /// with `parse_limited` to be reparsed later during ast lowering where we *do* emit the errors
     pub fn parse_limited(
         sess: &'sess Session,
         attrs: &[ast::Attribute],
         sym: Symbol,
         target_span: Span,
         target_node_id: NodeId,
-        limit_diagnostics: bool,
     ) -> Option<Attribute> {
-        let mut parsed = Self {
-            sess,
-            features: None,
-            tools: Vec::new(),
-            parse_only: Some(sym),
-            limit_diagnostics,
-        }
-        .parse_attribute_list(attrs, target_span, target_node_id, OmitDoc::Skip, std::convert::identity);
+        let mut parsed = Self { features: None, tools: Vec::new(), parse_only: Some(sym), sess }
+            .parse_attribute_list(
+                attrs,
+                target_span,
+                target_node_id,
+                OmitDoc::Skip,
+                std::convert::identity,
+            );
 
         assert!(parsed.len() <= 1);
 
         parsed.pop()
     }
 
-    pub fn new(sess: &'sess Session, features: &'sess Features, tools: Vec<Symbol>) -> Self {
-        Self { sess, features: Some(features), tools, parse_only: None, limit_diagnostics: false }
+    pub fn new_early(sess: &'sess Session, features: &'sess Features, tools: Vec<Symbol>) -> Self {
+        Self { features: Some(features), tools, parse_only: None, sess }
     }
+}
 
+impl<'sess> AttributeParser<'sess, Late> {
+    pub fn new(tcx: TyCtxt<'sess>, features: &'sess Features, tools: Vec<Symbol>) -> Self {
+        Self { features: Some(features), tools, parse_only: None, sess: tcx }
+    }
+}
+
+impl<'sess, S: Stage> AttributeParser<'sess, S> {
     pub(crate) fn sess(&self) -> &'sess Session {
-        self.sess
+        S::sess(&self.sess)
     }
 
     pub(crate) fn features(&self) -> &'sess Features {
@@ -216,25 +323,25 @@ impl<'sess> AttributeParser<'sess> {
     }
 
     pub(crate) fn dcx(&self) -> DiagCtxtHandle<'sess> {
-        self.sess.dcx()
+        self.sess().dcx()
     }
 
     /// Parse a list of attributes.
     ///
     /// `target_span` is the span of the thing this list of attributes is applied to,
     /// and when `omit_doc` is set, doc attributes are filtered out.
-    pub fn parse_attribute_list<'a>(
-        &'a self,
-        attrs: &'a [ast::Attribute],
+    pub fn parse_attribute_list(
+        &self,
+        attrs: &[ast::Attribute],
         target_span: Span,
-        target_node_id: NodeId,
+        target_id: S::Id,
         omit_doc: OmitDoc,
 
         lower_span: impl Copy + Fn(Span) -> Span,
     ) -> Vec<Attribute> {
         let mut attributes = Vec::new();
 
-        let group_cx = FinalizeContext { cx: self, target_span, target_node_id };
+        let group_cx = FinalizeContext { cx: self, target_span, target_id };
 
         for attr in attrs {
             // if we're only looking for a single attribute,
@@ -283,14 +390,14 @@ impl<'sess> AttributeParser<'sess> {
                     let (path, args) = parser.deconstruct();
                     let parts = path.segments().map(|i| i.name).collect::<Vec<_>>();
 
-                    if let Some(accepts) = ATTRIBUTE_MAPPING.0.get(parts.as_slice()) {
+                    if let Some(accepts) = S::parsers().0.get(parts.as_slice()) {
                         for f in accepts {
-                            let cx = AcceptContext {
+                            let cx: AcceptContext<'_, 'sess, S> = AcceptContext {
                                 group_cx: &group_cx,
                                 attr_span: lower_span(attr.span),
                             };
 
-                            f(&cx, &args)
+                            f(&cx, args)
                         }
                     } else {
                         // if we're here, we must be compiling a tool attribute... Or someone forgot to
@@ -321,7 +428,7 @@ impl<'sess> AttributeParser<'sess> {
         }
 
         let mut parsed_attributes = Vec::new();
-        for f in &ATTRIBUTE_MAPPING.1 {
+        for f in &S::parsers().1 {
             if let Some(attr) = f(&group_cx) {
                 parsed_attributes.push(Attribute::Parsed(attr));
             }
