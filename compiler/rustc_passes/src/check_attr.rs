@@ -10,7 +10,7 @@ use std::collections::hash_map::Entry;
 
 use rustc_abi::{Align, ExternAbi, Size};
 use rustc_ast::{AttrStyle, LitKind, MetaItemInner, MetaItemKind, MetaItemLit, ast};
-use rustc_attr_parsing::{AttributeKind, ReprAttr, find_attr};
+use rustc_attr_parsing::{find_attr, AttributeKind, InlineAttr, ReprAttr};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::{Applicability, DiagCtxtHandle, IntoDiagArg, MultiSpan, StashKey};
 use rustc_feature::{AttributeDuplicates, AttributeType, BUILTIN_ATTRIBUTE_MAP, BuiltinAttribute};
@@ -123,7 +123,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     AttributeKind::Stability { span, .. }
                     | AttributeKind::ConstStability { span, .. },
                 ) => self.check_stability_promotable(*span, target),
-                Attribute::Parsed(AttributeKind::Inline(_, attr_span)) => {
+                Attribute::Parsed(AttributeKind::Inline(i, attr_span)) => {
                     self.check_inline(hir_id, *attr_span, span, target)
                 }
                 Attribute::Parsed(AttributeKind::AllowInternalUnstable(syms)) => self
@@ -2548,8 +2548,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         span: Span,
         target: Target,
     ) {
-        let force_inline_attr = attrs.iter().find(|attr| attr.has_name(sym::rustc_force_inline));
-        match (target, force_inline_attr) {
+        match (target, find_attr!(attrs, AttributeKind::Inline(InlineAttr::Force { attr_span, .. }, _) => *attr_span)) {
             (Target::Closure, None) => {
                 let is_coro = matches!(
                     self.tcx.hir().expect_expr(hir_id).kind,
@@ -2561,20 +2560,22 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 );
                 let parent_did = self.tcx.hir_get_parent_item(hir_id).to_def_id();
                 let parent_span = self.tcx.def_span(parent_did);
-                let parent_force_inline_attr =
-                    self.tcx.get_attr(parent_did, sym::rustc_force_inline);
-                if let Some(attr) = parent_force_inline_attr
+
+                if let Some(attr_span) = find_attr!(
+                    self.tcx.get_all_attrs(parent_did),
+                    AttributeKind::Inline(InlineAttr::Force { attr_span, .. }, _) => *attr_span
+                )
                     && is_coro
                 {
                     self.dcx().emit_err(errors::RustcForceInlineCoro {
-                        attr_span: attr.span(),
+                        attr_span,
                         span: parent_span,
                     });
                 }
             }
             (Target::Fn, _) => (),
-            (_, Some(attr)) => {
-                self.dcx().emit_err(errors::RustcForceInline { attr_span: attr.span(), span });
+            (_, Some(attr_span)) => {
+                self.dcx().emit_err(errors::RustcForceInline { attr_span, span });
             }
             (_, None) => (),
         }
