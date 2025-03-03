@@ -25,7 +25,7 @@ impl<S: Stage> CombineAttributeParser<S> for ReprParser {
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::Repr;
 
     fn extend<'c>(
-        cx: &'c AcceptContext<'c, '_, S>,
+        cx: &'c mut AcceptContext<'_, '_, S>,
         args: &'c ArgParser<'_>,
     ) -> impl IntoIterator<Item = Self::Item> + 'c {
         let mut reprs = Vec::new();

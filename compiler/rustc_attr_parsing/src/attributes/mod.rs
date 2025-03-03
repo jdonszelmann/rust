@@ -35,7 +35,7 @@ pub(crate) mod stability;
 pub(crate) mod transparency;
 pub(crate) mod util;
 
-type AcceptFn<T, S> = for<'sess> fn(&mut T, &AcceptContext<'_, 'sess, S>, &ArgParser<'_>);
+type AcceptFn<T, S> = for<'sess> fn(&mut T, &mut AcceptContext<'_, 'sess, S>, &ArgParser<'_>);
 type AcceptMapping<T, S> = &'static [(&'static [rustc_span::Symbol], AcceptFn<T, S>)];
 
 /// An [`AttributeParser`] is a type which searches for syntactic attributes.
@@ -153,7 +153,7 @@ pub(crate) enum OnDuplicate<S: Stage> {
 impl<S: Stage> OnDuplicate<S> {
     fn exec<P: SingleAttributeParser<S>>(
         &self,
-        cx: &AcceptContext<'_, '_, S>,
+        cx: &mut AcceptContext<'_, '_, S>,
         used: Span,
         unused: Span,
     ) {
@@ -210,7 +210,7 @@ pub(crate) trait CombineAttributeParser<S: Stage>: 'static {
 
     /// Converts a single syntactical attribute to a number of elements of the semantic attribute, or [`AttributeKind`]
     fn extend<'c>(
-        cx: &'c AcceptContext<'c, '_, S>,
+        cx: &'c mut AcceptContext<'_, '_, S>,
         args: &'c ArgParser<'_>,
     ) -> impl IntoIterator<Item = Self::Item> + 'c;
 }

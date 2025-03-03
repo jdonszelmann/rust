@@ -15,7 +15,7 @@ impl<S: Stage> CombineAttributeParser<S> for AllowInternalUnstableParser {
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::AllowInternalUnstable;
 
     fn extend<'c>(
-        cx: &'c AcceptContext<'c, '_, S>,
+        cx: &'c mut AcceptContext<'_, '_, S>,
         args: &'c ArgParser<'_>,
     ) -> impl IntoIterator<Item = Self::Item> {
         parse_unstable(cx, args, <Self as CombineAttributeParser<S>>::PATH[0])
@@ -31,7 +31,7 @@ impl<S: Stage> CombineAttributeParser<S> for AllowConstFnUnstableParser {
     const CONVERT: ConvertFn<Self::Item> = AttributeKind::AllowConstFnUnstable;
 
     fn extend<'c>(
-        cx: &'c AcceptContext<'c, '_, S>,
+        cx: &'c mut AcceptContext<'_, '_, S>,
         args: &'c ArgParser<'_>,
     ) -> impl IntoIterator<Item = Self::Item> + 'c {
         parse_unstable(cx, args, <Self as CombineAttributeParser<S>>::PATH[0])

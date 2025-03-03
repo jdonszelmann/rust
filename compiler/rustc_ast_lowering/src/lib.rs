@@ -52,7 +52,7 @@ use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_data_structures::tagged_ptr::TaggedRef;
 use rustc_errors::{DiagArgFromDisplay, DiagCtxtHandle, StashKey};
 use rustc_hir::def::{DefKind, LifetimeRes, Namespace, PartialRes, PerNS, Res};
-use rustc_hir::def_id::{CRATE_DEF_ID, LOCAL_CRATE, LocalDefId};
+use rustc_hir::def_id::{LocalDefId, CRATE_DEF_ID, LOCAL_CRATE};
 use rustc_hir::{
     self as hir, ConstArg, GenericArg, HirId, ItemLocalMap, LangItem, ParamName, TraitCandidate,
 };
@@ -193,6 +193,22 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
 
     pub(crate) fn dcx(&self) -> DiagCtxtHandle<'hir> {
         self.tcx.dcx()
+    }
+}
+
+struct SpanLowerer {
+    is_incremental: bool,
+    defid: LocalDefId,
+}
+
+impl SpanLowerer {
+    fn lower(&self, span: Span) -> Span {
+        if self.is_incremental {
+            span.with_parent(Some(self.defid))
+        } else {
+            // Do not make spans relative when not using incremental compilation.
+            span
+        }
     }
 }
 
@@ -739,15 +755,17 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         })
     }
 
+    fn span_lowerer(&self) -> SpanLowerer {
+        SpanLowerer {
+            is_incremental: self.tcx.sess.opts.incremental.is_some(),
+            defid: self.current_hir_id_owner.def_id,
+        }
+    }
+
     /// Intercept all spans entering HIR.
     /// Mark a span as relative to the current owning item.
     fn lower_span(&self, span: Span) -> Span {
-        if self.tcx.sess.opts.incremental.is_some() {
-            span.with_parent(Some(self.current_hir_id_owner.def_id))
-        } else {
-            // Do not make spans relative when not using incremental compilation.
-            span
-        }
+        self.span_lowerer().lower(span)
     }
 
     fn lower_ident(&self, ident: Ident) -> Ident {
@@ -891,17 +909,18 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
     }
 
     fn lower_attrs_vec(
-        &self,
+        &mut self,
         attrs: &[Attribute],
         target_span: Span,
         target_hir_id: HirId,
     ) -> Vec<hir::Attribute> {
+        let l = self.span_lowerer();
         self.attribute_parser.parse_attribute_list(
             attrs,
             target_span,
             target_hir_id,
             OmitDoc::Lower,
-            |s| self.lower_span(s),
+            |s| l.lower(s),
         )
     }
 
