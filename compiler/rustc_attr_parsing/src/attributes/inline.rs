@@ -64,14 +64,24 @@ impl<S: Stage> SingleAttributeParser<S> for RustcForceInlineParser {
         let reason = match args {
             ArgParser::NoArgs => None,
             ArgParser::List(list) => {
-                cx.emit_err(IncorrectMetaItem {
-                    span: list.span,
-                    suggestion: None,
-                });
-                return None
+                let Some(l) = list.single() else {
+                    struct_span_code_err!(cx.dcx(), cx.attr_span, E0534, "expected one argument")
+                        .emit();
+                    return None;
+                };
+
+                let Some(reason) = l.lit().and_then(|i| i.kind.str()) else {
+                    cx.emit_err(IncorrectMetaItem {
+                        span: l.span(),
+                        suggestion: None,
+                    });
+                    return None;
+                };
+
+                Some(reason)
             }
             ArgParser::NameValue(v) => {
-                let Some(str) = v.value_as_str() else {
+                let Some(reason) = v.value_as_str() else {
                     cx.emit_err(IncorrectMetaItem {
                         span: v.value_span,
                         suggestion: None,
@@ -79,7 +89,7 @@ impl<S: Stage> SingleAttributeParser<S> for RustcForceInlineParser {
                     return None;
                 };
 
-                Some(str)
+                Some(reason)
             }
         };
 

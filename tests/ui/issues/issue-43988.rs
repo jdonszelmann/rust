@@ -9,7 +9,7 @@ fn main() {
 
     #[inline(XYZ)]
     let _b = 4;
-    //~^^ ERROR attribute should be applied to function or closure
+    //~^^ ERROR invalid argument
 
     #[repr(nothing)]
     let _x = 0;
@@ -29,7 +29,7 @@ fn main() {
 
     #[inline(ABC)]
     foo();
-    //~^^ ERROR attribute should be applied to function or closure
+    //~^^ ERROR invalid argument
 
     let _z = #[repr] 1;
     //~^ ERROR malformed `repr` attribute

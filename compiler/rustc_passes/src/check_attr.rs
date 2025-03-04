@@ -123,7 +123,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     AttributeKind::Stability { span, .. }
                     | AttributeKind::ConstStability { span, .. },
                 ) => self.check_stability_promotable(*span, target),
-                Attribute::Parsed(AttributeKind::Inline(i, attr_span)) => {
+                Attribute::Parsed(AttributeKind::Inline(InlineAttr::Force {..}, ..)) => {} // handled separately below
+                Attribute::Parsed(AttributeKind::Inline(_, attr_span)) => {
                     self.check_inline(hir_id, *attr_span, span, target)
                 }
                 Attribute::Parsed(AttributeKind::AllowInternalUnstable(syms)) => self
@@ -616,6 +617,18 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         ) => {
                             continue;
                         }
+                        Attribute::Parsed(
+                            AttributeKind::Inline(.., span),
+                        ) => {
+                            self.dcx().emit_err(errors::NakedFunctionIncompatibleAttribute {
+                                span: *span,
+                                naked_span: attr.span(),
+                                attr: sym::inline,
+                            });
+
+                            return;
+                        }
+                        // FIXME(jdonszelmann): make exhaustive
                         _ => {}
                     }
 
@@ -2771,7 +2784,7 @@ fn check_invalid_crate_level_attr(tcx: TyCtxt<'_>, attrs: &[Attribute]) {
 fn check_non_exported_macro_for_invalid_attrs(tcx: TyCtxt<'_>, item: &Item<'_>) {
     let attrs = tcx.hir().attrs(item.hir_id());
 
-    if let Some(attr_span) = find_attr!(attrs, AttributeKind::Inline(_, span) => *span) {
+    if let Some(attr_span) = find_attr!(attrs, AttributeKind::Inline(i, span) if !matches!(i, InlineAttr::Force{..}) => *span) {
         tcx.dcx().emit_err(errors::NonExportedMacroInvalidAttrs { attr_span });
     }
 }

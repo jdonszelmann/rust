@@ -9,22 +9,21 @@
 // Test that invalid force inlining attributes error as expected.
 
 #[rustc_force_inline("foo")]
-//~^ ERROR malformed `rustc_force_inline` attribute input
 pub fn forced1() {
 }
 
 #[rustc_force_inline(bar, baz)]
-//~^ ERROR malformed `rustc_force_inline` attribute input
+//~^ ERROR expected one argument
 pub fn forced2() {
 }
 
 #[rustc_force_inline(2)]
-//~^ ERROR malformed `rustc_force_inline` attribute input
+//~^ ERROR expected a quoted string literal
 pub fn forced3() {
 }
 
 #[rustc_force_inline = 2]
-//~^ ERROR malformed `rustc_force_inline` attribute input
+//~^ ERROR expected a quoted string literal
 pub fn forced4() {
 }
 
