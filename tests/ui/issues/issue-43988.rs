@@ -9,7 +9,7 @@ fn main() {
 
     #[inline(XYZ)]
     let _b = 4;
-    //~^^ ERROR invalid argument
+    //~^^ ERROR malformed `inline` attribute
 
     #[repr(nothing)]
     let _x = 0;
@@ -29,7 +29,7 @@ fn main() {
 
     #[inline(ABC)]
     foo();
-    //~^^ ERROR invalid argument
+    //~^^ ERROR malformed `inline` attribute
 
     let _z = #[repr] 1;
     //~^ ERROR malformed `repr` attribute

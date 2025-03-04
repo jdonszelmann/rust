@@ -144,3 +144,8 @@ attr_parsing_unused_duplicate =
     .suggestion = remove this attribute
     .note = attribute also specified here
     .warn = {-passes_previously_accepted}
+
+attr_parsing_ill_formed_attribute_input = {$num_suggestions ->
+        [1] attribute must be of the form {$suggestions}
+        *[other] valid forms for the attribute are {$suggestions}
+    }

@@ -13,17 +13,17 @@ pub fn forced1() {
 }
 
 #[rustc_force_inline(bar, baz)]
-//~^ ERROR expected one argument
+//~^ ERROR malformed `rustc_force_inline` attribute input
 pub fn forced2() {
 }
 
 #[rustc_force_inline(2)]
-//~^ ERROR expected a quoted string literal
+//~^ ERROR malformed `rustc_force_inline` attribute input
 pub fn forced3() {
 }
 
 #[rustc_force_inline = 2]
-//~^ ERROR expected a quoted string literal
+//~^ ERROR malformed `rustc_force_inline` attribute input
 pub fn forced4() {
 }
 

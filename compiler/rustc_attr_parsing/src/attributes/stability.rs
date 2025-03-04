@@ -5,6 +5,7 @@ use rustc_attr_data_structures::{
     StableSince, UnstableReason, VERSION_PLACEHOLDER,
 };
 use rustc_errors::ErrorGuaranteed;
+use rustc_feature::{template, AttributeTemplate};
 use rustc_span::{Span, Symbol, kw, sym};
 
 use super::util::parse_version;
@@ -43,7 +44,7 @@ impl StabilityParser {
 
 impl<S: Stage> AttributeParser<S> for StabilityParser {
     const ATTRIBUTES: AcceptMapping<Self, S> = &[
-        (&[sym::stable], |this, cx, args| {
+        (&[sym::stable], template!(List: r#"feature = "name", since = "version""#), |this, cx, args| {
             reject_outside_std!(cx);
             if !this.check_duplicate(cx)
                 && let Some((feature, level)) = parse_stability(cx, args)
@@ -51,7 +52,7 @@ impl<S: Stage> AttributeParser<S> for StabilityParser {
                 this.stability = Some((Stability { level, feature }, cx.attr_span));
             }
         }),
-        (&[sym::unstable], |this, cx, args| {
+        (&[sym::unstable], template!(List: r#"feature = "name", reason = "...", issue = "N""#), |this, cx, args| {
             reject_outside_std!(cx);
             if !this.check_duplicate(cx)
                 && let Some((feature, level)) = parse_unstability(cx, args)
@@ -59,7 +60,7 @@ impl<S: Stage> AttributeParser<S> for StabilityParser {
                 this.stability = Some((Stability { level, feature }, cx.attr_span));
             }
         }),
-        (&[sym::rustc_allowed_through_unstable_modules], |this, cx, args| {
+        (&[sym::rustc_allowed_through_unstable_modules], template!(NameValueStr: "deprecation message"), |this, cx, args| {
             reject_outside_std!(cx);
             this.allowed_through_unstable_modules =
                 Some(match args.name_value().and_then(|i| i.value_as_str()) {
@@ -101,7 +102,7 @@ pub(crate) struct BodyStabilityParser {
 
 impl<S: Stage> AttributeParser<S> for BodyStabilityParser {
     const ATTRIBUTES: AcceptMapping<Self, S> =
-        &[(&[sym::rustc_default_body_unstable], |this, cx, args| {
+        &[(&[sym::rustc_default_body_unstable], template!(List: r#"feature = "name", reason = "...", issue = "N""#), |this, cx, args| {
             reject_outside_std!(cx);
             if this.stability.is_some() {
                 cx.dcx()
@@ -124,6 +125,7 @@ impl<S: Stage> SingleAttributeParser<S> for ConstStabilityIndirectParser {
     const PATH: &'static [rustc_span::Symbol] = &[sym::rustc_const_stable_indirect];
     const ATTRIBUTE_ORDER: AttributeOrder = AttributeOrder::KeepFirst;
     const ON_DUPLICATE: OnDuplicate<S> = OnDuplicate::Ignore;
+    const TEMPLATE: AttributeTemplate = template!(Word);
 
     fn convert(_cx: &AcceptContext<'_, '_, S>, _args: &ArgParser<'_>) -> Option<AttributeKind> {
         Some(AttributeKind::ConstStabilityIndirect)
@@ -150,7 +152,7 @@ impl ConstStabilityParser {
 
 impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
     const ATTRIBUTES: AcceptMapping<Self, S> = &[
-        (&[sym::rustc_const_stable], |this, cx, args| {
+        (&[sym::rustc_const_stable], template!(List: r#"feature = "name""#), |this, cx, args| {
             reject_outside_std!(cx);
 
             if !this.check_duplicate(cx)
@@ -162,7 +164,7 @@ impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
                 ));
             }
         }),
-        (&[sym::rustc_const_unstable], |this, cx, args| {
+        (&[sym::rustc_const_unstable], template!(List: r#"feature = "name""#), |this, cx, args| {
             reject_outside_std!(cx);
             if !this.check_duplicate(cx)
                 && let Some((feature, level)) = parse_unstability(cx, args)
@@ -173,7 +175,7 @@ impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
                 ));
             }
         }),
-        (&[sym::rustc_promotable], |this, cx, _| {
+        (&[sym::rustc_promotable], template!(Word), |this, cx, _| {
             reject_outside_std!(cx);
             this.promotable = true;
         }),

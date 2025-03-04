@@ -4,23 +4,74 @@ error: allow, cfg, cfg_attr, deny, expect, forbid, and warn are the only allowed
 LL | fn barqux(#[rustc_force_inline] _x: u32) {}
    |           ^^^^^^^^^^^^^^^^^^^^^
 
-error[E0534]: expected one argument
+error[E0539]: malformed `rustc_force_inline` attribute input
   --> $DIR/invalid.rs:15:1
    |
 LL | #[rustc_force_inline(bar, baz)]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: expected a single argument here
+  --> $DIR/invalid.rs:15:21
+   |
+LL | #[rustc_force_inline(bar, baz)]
+   |                     ^^^^^^^^^^
+help: the following are possible correct uses
+   |
+LL - #[rustc_force_inline(bar, baz)]
+LL + #[rustc_force_inline = "reason"]
+   |
+LL - #[rustc_force_inline(bar, baz)]
+LL + #[rustc_force_inline(reason)]
+   |
+LL - #[rustc_force_inline(bar, baz)]
+LL + #[rustc_force_inline]
+   |
 
-error[E0539]: expected a quoted string literal
+error[E0539]: malformed `rustc_force_inline` attribute input
+  --> $DIR/invalid.rs:20:1
+   |
+LL | #[rustc_force_inline(2)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: expected a string literal here
   --> $DIR/invalid.rs:20:22
    |
 LL | #[rustc_force_inline(2)]
    |                      ^
+help: the following are possible correct uses
+   |
+LL - #[rustc_force_inline(2)]
+LL + #[rustc_force_inline = "reason"]
+   |
+LL - #[rustc_force_inline(2)]
+LL + #[rustc_force_inline(reason)]
+   |
+LL - #[rustc_force_inline(2)]
+LL + #[rustc_force_inline]
+   |
 
-error[E0539]: expected a quoted string literal
+error[E0539]: malformed `rustc_force_inline` attribute input
+  --> $DIR/invalid.rs:25:1
+   |
+LL | #[rustc_force_inline = 2]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: expected a string literal here
   --> $DIR/invalid.rs:25:24
    |
 LL | #[rustc_force_inline = 2]
    |                        ^
+help: the following are possible correct uses
+   |
+LL - #[rustc_force_inline = 2]
+LL + #[rustc_force_inline = "reason"]
+   |
+LL - #[rustc_force_inline = 2]
+LL + #[rustc_force_inline(reason)]
+   |
+LL - #[rustc_force_inline = 2]
+LL + #[rustc_force_inline]
+   |
 
 error: attribute should be applied to a function
   --> $DIR/invalid.rs:30:1
@@ -341,5 +392,4 @@ LL |     fn foo();
 
 error: aborting due to 37 previous errors
 
-Some errors have detailed explanations: E0534, E0539.
-For more information about an error, try `rustc --explain E0534`.
+For more information about this error, try `rustc --explain E0539`.
