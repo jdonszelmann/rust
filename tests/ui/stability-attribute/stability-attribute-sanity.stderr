@@ -10,7 +10,7 @@ error[E0539]: malformed `stable` attribute input
 LL |     #[stable(feature = "a", since)]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: must be of the form: `#[stable(feature = "name", since = "version")]`
    |
-note: expected this to be of the form `name = value`
+note: expected this to be of the form `since = "..."`
   --> $DIR/stability-attribute-sanity.rs:11:29
    |
 LL |     #[stable(feature = "a", since)]
@@ -22,7 +22,7 @@ error[E0539]: malformed `stable` attribute input
 LL |     #[stable(feature, since = "3.3.3")]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: must be of the form: `#[stable(feature = "name", since = "version")]`
    |
-note: expected this to be of the form `name = value`
+note: expected this to be of the form `feature = "..."`
   --> $DIR/stability-attribute-sanity.rs:14:14
    |
 LL |     #[stable(feature, since = "3.3.3")]
@@ -34,7 +34,7 @@ error[E0539]: malformed `stable` attribute input
 LL |     #[stable(feature = "a", since(b))]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: must be of the form: `#[stable(feature = "name", since = "version")]`
    |
-note: expected this to be of the form `name = value`
+note: expected this to be of the form `since = "..."`
   --> $DIR/stability-attribute-sanity.rs:17:29
    |
 LL |     #[stable(feature = "a", since(b))]
@@ -46,7 +46,7 @@ error[E0539]: malformed `stable` attribute input
 LL |     #[stable(feature(b), since = "3.3.3")]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: must be of the form: `#[stable(feature = "name", since = "version")]`
    |
-note: expected this to be of the form `name = value`
+note: expected this to be of the form `feature = "..."`
   --> $DIR/stability-attribute-sanity.rs:20:14
    |
 LL |     #[stable(feature(b), since = "3.3.3")]

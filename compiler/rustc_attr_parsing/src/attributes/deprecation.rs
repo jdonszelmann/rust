@@ -20,10 +20,7 @@ fn get<S: Stage>(
     item: &Option<Symbol>,
 ) -> Option<Symbol> {
     if item.is_some() {
-        cx.emit_err(session_diagnostics::MultipleItem {
-            span: param_span,
-            item: ident.to_string(),
-        });
+        cx.duplicate_key(ident.span, ident.name);
         return None;
     }
     if let Some(v) = arg.name_value() {
@@ -40,7 +37,7 @@ fn get<S: Stage>(
             None
         }
     } else {
-        cx.expected_name_value(param_span);
+        cx.expected_name_value(param_span, Some(ident.name));
         None
     }
 }

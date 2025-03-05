@@ -22,7 +22,7 @@ impl<S: Stage> SingleAttributeParser<S> for TransparencyParser {
 
     fn convert(cx: &AcceptContext<'_, '_, S>, args: &ArgParser<'_>) -> Option<AttributeKind> {
         let Some(nv) = args.name_value() else {
-            cx.expected_name_value(cx.attr_span);
+            cx.expected_name_value(cx.attr_span, None);
             return None;
         };
         match nv.value_as_str() {

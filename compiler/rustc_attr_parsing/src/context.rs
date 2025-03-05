@@ -271,13 +271,26 @@ impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
         })
     }
 
-    pub(crate) fn expected_name_value(&self, span: Span) -> ErrorGuaranteed {
+    /// emit an error that a `name = value` pair was expected at this span. The symbol can be given for
+    /// a nicer error message talking about the specific name that was found lacking a value.
+    pub(crate) fn expected_name_value(&self, span: Span, name: Option<Symbol>) -> ErrorGuaranteed {
         self.emit_err(AttributeParseError {
             span,
             attr_span: self.attr_span,
             template: self.template.clone(),
             attribute: self.attr_path.clone(),
-            reason: AttributeParseErrorReason::ExpectedNameValue,
+            reason: AttributeParseErrorReason::ExpectedNameValue(name),
+        })
+    }
+
+    /// emit an error that a `name = value` pair was found where that name was already seen.
+    pub(crate) fn duplicate_key(&self, span: Span, key: Symbol) -> ErrorGuaranteed {
+        self.emit_err(AttributeParseError {
+            span,
+            attr_span: self.attr_span,
+            template: self.template.clone(),
+            attribute: self.attr_path.clone(),
+            reason: AttributeParseErrorReason::DuplicateKey(key),
         })
     }
 
