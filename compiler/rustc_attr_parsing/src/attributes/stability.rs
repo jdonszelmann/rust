@@ -5,8 +5,8 @@ use rustc_attr_data_structures::{
     StableSince, UnstableReason, VERSION_PLACEHOLDER,
 };
 use rustc_errors::ErrorGuaranteed;
-use rustc_feature::{template, AttributeTemplate};
-use rustc_span::{sym, Ident, Span, Symbol};
+use rustc_feature::{AttributeTemplate, template};
+use rustc_span::{Ident, Span, Symbol, sym};
 
 use super::util::parse_version;
 use super::{AcceptMapping, AttributeOrder, AttributeParser, OnDuplicate, SingleAttributeParser};
@@ -44,33 +44,45 @@ impl StabilityParser {
 
 impl<S: Stage> AttributeParser<S> for StabilityParser {
     const ATTRIBUTES: AcceptMapping<Self, S> = &[
-        (&[sym::stable], template!(List: r#"feature = "name", since = "version""#), |this, cx, args| {
-            reject_outside_std!(cx);
-            if !this.check_duplicate(cx)
-                && let Some((feature, level)) = parse_stability(cx, args)
-            {
-                this.stability = Some((Stability { level, feature }, cx.attr_span));
-            }
-        }),
-        (&[sym::unstable], template!(List: r#"feature = "name", reason = "...", issue = "N""#), |this, cx, args| {
-            reject_outside_std!(cx);
-            if !this.check_duplicate(cx)
-                && let Some((feature, level)) = parse_unstability(cx, args)
-            {
-                this.stability = Some((Stability { level, feature }, cx.attr_span));
-            }
-        }),
-        (&[sym::rustc_allowed_through_unstable_modules], template!(NameValueStr: "deprecation message"), |this, cx, args| {
-            reject_outside_std!(cx);
-            this.allowed_through_unstable_modules =
-                Some(match args.name_value().and_then(|i| i.value_as_str()) {
-                    Some(msg) => msg,
-                    None => {
-                        cx.expected_name_value(cx.attr_span, None);
-                        return;
-                    },
-                });
-        }),
+        (
+            &[sym::stable],
+            template!(List: r#"feature = "name", since = "version""#),
+            |this, cx, args| {
+                reject_outside_std!(cx);
+                if !this.check_duplicate(cx)
+                    && let Some((feature, level)) = parse_stability(cx, args)
+                {
+                    this.stability = Some((Stability { level, feature }, cx.attr_span));
+                }
+            },
+        ),
+        (
+            &[sym::unstable],
+            template!(List: r#"feature = "name", reason = "...", issue = "N""#),
+            |this, cx, args| {
+                reject_outside_std!(cx);
+                if !this.check_duplicate(cx)
+                    && let Some((feature, level)) = parse_unstability(cx, args)
+                {
+                    this.stability = Some((Stability { level, feature }, cx.attr_span));
+                }
+            },
+        ),
+        (
+            &[sym::rustc_allowed_through_unstable_modules],
+            template!(NameValueStr: "deprecation message"),
+            |this, cx, args| {
+                reject_outside_std!(cx);
+                this.allowed_through_unstable_modules =
+                    Some(match args.name_value().and_then(|i| i.value_as_str()) {
+                        Some(msg) => msg,
+                        None => {
+                            cx.expected_name_value(cx.attr_span, None);
+                            return;
+                        }
+                    });
+            },
+        ),
     ];
 
     fn finalize(mut self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
@@ -104,8 +116,10 @@ pub(crate) struct BodyStabilityParser {
 }
 
 impl<S: Stage> AttributeParser<S> for BodyStabilityParser {
-    const ATTRIBUTES: AcceptMapping<Self, S> =
-        &[(&[sym::rustc_default_body_unstable], template!(List: r#"feature = "name", reason = "...", issue = "N""#), |this, cx, args| {
+    const ATTRIBUTES: AcceptMapping<Self, S> = &[(
+        &[sym::rustc_default_body_unstable],
+        template!(List: r#"feature = "name", reason = "...", issue = "N""#),
+        |this, cx, args| {
             reject_outside_std!(cx);
             if this.stability.is_some() {
                 cx.dcx()
@@ -113,7 +127,8 @@ impl<S: Stage> AttributeParser<S> for BodyStabilityParser {
             } else if let Some((feature, level)) = parse_unstability(cx, args) {
                 this.stability = Some((DefaultBodyStability { level, feature }, cx.attr_span));
             }
-        })];
+        },
+    )];
 
     fn finalize(self, _cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
         let (stability, span) = self.stability?;
@@ -348,7 +363,9 @@ pub(crate) fn parse_unstability<S: Stage>(
                 }
                 is_soft = true;
             }
-            sym::implied_by => insert_value_into_option_or_error(cx, &param, &mut implied_by, word)?,
+            sym::implied_by => {
+                insert_value_into_option_or_error(cx, &param, &mut implied_by, word)?
+            }
             _ => {
                 cx.emit_err(session_diagnostics::UnknownMetaItem {
                     span: param.span(),

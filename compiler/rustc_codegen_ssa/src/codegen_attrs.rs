@@ -517,9 +517,10 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
 
     mixed_export_name_no_mangle_lint_state.lint_if_mixed(tcx);
 
-
     let inline_span;
-    (codegen_fn_attrs.inline, inline_span) = if let Some((inline_attr, span)) = find_attr!(attrs, AttributeKind::Inline(i, span) => (*i, *span)) {
+    (codegen_fn_attrs.inline, inline_span) = if let Some((inline_attr, span)) =
+        find_attr!(attrs, AttributeKind::Inline(i, span) => (*i, *span))
+    {
         (inline_attr, Some(span))
     } else {
         (InlineAttr::None, None)

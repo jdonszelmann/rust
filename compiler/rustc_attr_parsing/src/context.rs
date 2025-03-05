@@ -198,9 +198,7 @@ impl Stage for Late {
         span: Span,
         diag: impl DynSend + for<'x> LintDiagnostic<'x, ()> + 'static,
     ) {
-        dcx.delay_lint_during_ast_lowering((lint, id, span, Box::new(|x| {
-            diag.decorate_lint(x)
-        })));
+        dcx.delay_lint_during_ast_lowering((lint, id, span, Box::new(|x| diag.decorate_lint(x))));
     }
 }
 
@@ -223,7 +221,7 @@ pub(crate) struct AcceptContext<'f, 'sess, S: Stage> {
     pub(crate) template: &'f AttributeTemplate,
 
     /// The name of the attribute we're currently accepting.
-    pub(crate) attr_path: AttrPath
+    pub(crate) attr_path: AttrPath,
 }
 
 impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
@@ -235,7 +233,7 @@ impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
     /// must be delayed until after HIR is built. This method will take care of the details of
     /// that.
     pub(crate) fn emit_lint(
-        & self,
+        &self,
         lint: &'static Lint,
         span: Span,
         diag: impl DynSend + for<'x> LintDiagnostic<'x, ()> + 'static,
@@ -243,12 +241,13 @@ impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
         S::emit_lint(self.dcx(), lint, self.target_id, span, diag)
     }
 
-    pub(crate) fn unknown_key(&self, span: Span, found: String, options: &'static [&'static str]) -> ErrorGuaranteed {
-        self.emit_err(UnknownMetaItem {
-            span,
-            item: found,
-            expected: options,
-        })
+    pub(crate) fn unknown_key(
+        &self,
+        span: Span,
+        found: String,
+        options: &'static [&'static str],
+    ) -> ErrorGuaranteed {
+        self.emit_err(UnknownMetaItem { span, item: found, expected: options })
     }
 
     pub(crate) fn expected_string_literal(&self, span: Span) -> ErrorGuaranteed {
@@ -304,29 +303,37 @@ impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
         })
     }
 
-    pub(crate) fn expected_specific_argument(&self, span: Span, possibilities: Vec<&'static str>) -> ErrorGuaranteed {
+    pub(crate) fn expected_specific_argument(
+        &self,
+        span: Span,
+        possibilities: Vec<&'static str>,
+    ) -> ErrorGuaranteed {
         self.emit_err(AttributeParseError {
             span,
             attr_span: self.attr_span,
             template: self.template.clone(),
             attribute: self.attr_path.clone(),
-            reason: AttributeParseErrorReason::ExpectedSpecificArgument{
+            reason: AttributeParseErrorReason::ExpectedSpecificArgument {
                 possibilities,
-                strings: false
-            }
+                strings: false,
+            },
         })
     }
 
-    pub(crate) fn expected_specific_argument_strings(&self, span: Span, possibilities: Vec<&'static str>) -> ErrorGuaranteed {
+    pub(crate) fn expected_specific_argument_strings(
+        &self,
+        span: Span,
+        possibilities: Vec<&'static str>,
+    ) -> ErrorGuaranteed {
         self.emit_err(AttributeParseError {
             span,
             attr_span: self.attr_span,
             template: self.template.clone(),
             attribute: self.attr_path.clone(),
-            reason: AttributeParseErrorReason::ExpectedSpecificArgument{
+            reason: AttributeParseErrorReason::ExpectedSpecificArgument {
                 possibilities,
                 strings: true,
-            }
+            },
         })
     }
 }
@@ -417,12 +424,12 @@ impl<'sess> AttributeParser<'sess, Early> {
     ) -> Option<Attribute> {
         let mut p = Self { features: None, tools: Vec::new(), parse_only: Some(sym), sess };
         let mut parsed = p.parse_attribute_list(
-                attrs,
-                target_span,
-                target_node_id,
-                OmitDoc::Skip,
-                std::convert::identity,
-            );
+            attrs,
+            target_span,
+            target_node_id,
+            OmitDoc::Skip,
+            std::convert::identity,
+        );
         assert!(parsed.len() <= 1);
 
         parsed.pop()

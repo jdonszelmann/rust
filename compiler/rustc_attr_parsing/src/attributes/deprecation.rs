@@ -1,5 +1,5 @@
 use rustc_attr_data_structures::{AttributeKind, DeprecatedSince, Deprecation};
-use rustc_feature::{template, AttributeTemplate};
+use rustc_feature::{AttributeTemplate, template};
 use rustc_span::symbol::Ident;
 use rustc_span::{Span, Symbol, sym};
 

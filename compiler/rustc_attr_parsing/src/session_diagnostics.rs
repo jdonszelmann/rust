@@ -1,8 +1,10 @@
 use std::num::IntErrorKind;
 
 use rustc_ast as ast;
-use rustc_errors::{codes::*, DiagArgValue};
-use rustc_errors::{Applicability, Diag, DiagCtxtHandle, Diagnostic, EmissionGuarantee, Level};
+use rustc_errors::codes::*;
+use rustc_errors::{
+    Applicability, Diag, DiagArgValue, DiagCtxtHandle, Diagnostic, EmissionGuarantee, Level,
+};
 use rustc_feature::AttributeTemplate;
 use rustc_hir::AttrPath;
 use rustc_macros::{Diagnostic, LintDiagnostic, Subdiagnostic};
@@ -476,10 +478,7 @@ pub(crate) enum AttributeParseErrorReason {
     ExpectedList,
     ExpectedNameValue(Option<Symbol>),
     DuplicateKey(Symbol),
-    ExpectedSpecificArgument {
-        possibilities: Vec<&'static str>,
-        strings: bool,
-    }
+    ExpectedSpecificArgument { possibilities: Vec<&'static str>, strings: bool },
 }
 
 pub(crate) struct AttributeParseError {
@@ -494,66 +493,74 @@ impl<'a, G: EmissionGuarantee> Diagnostic<'a, G> for AttributeParseError {
     fn into_diag(self, dcx: DiagCtxtHandle<'a>, level: Level) -> Diag<'a, G> {
         let name = self.attribute.to_string();
 
-        let mut diag = Diag::new(
-            dcx,
-            level,
-            format!("malformed `{name}` attribute input")
-        );
+        let mut diag = Diag::new(dcx, level, format!("malformed `{name}` attribute input"));
         diag.span(self.attr_span);
         diag.code(E0539);
         match self.reason {
             AttributeParseErrorReason::ExpectedStringLiteral => {
                 diag.span_note(self.span, "expected a string literal here");
-            },
+            }
             AttributeParseErrorReason::ExpectedSingleArgument => {
                 diag.span_note(self.span, "expected a single argument here");
-            },
+            }
             AttributeParseErrorReason::ExpectedList => {
                 diag.span_note(self.span, "expected this to be a list");
-            },
+            }
             AttributeParseErrorReason::DuplicateKey(key) => {
                 diag.span_note(self.span, format!("found `{key}` used as a key more than once"));
                 diag.code(E0538);
-            },
+            }
             AttributeParseErrorReason::ExpectedNameValue(None) => {
-                diag.span_note(self.span, format!("expected this to be of the form `{name} = \"...\"`"));
-            },
+                diag.span_note(
+                    self.span,
+                    format!("expected this to be of the form `{name} = \"...\"`"),
+                );
+            }
             AttributeParseErrorReason::ExpectedNameValue(Some(name)) => {
-                diag.span_note(self.span, format!("expected this to be of the form `{name} = \"...\"`"));
-            },
-            AttributeParseErrorReason::ExpectedSpecificArgument{possibilities, strings} => {
-                let quote = if strings {
-                    '"'
-                } else {
-                    '`'
-                };
+                diag.span_note(
+                    self.span,
+                    format!("expected this to be of the form `{name} = \"...\"`"),
+                );
+            }
+            AttributeParseErrorReason::ExpectedSpecificArgument { possibilities, strings } => {
+                let quote = if strings { '"' } else { '`' };
                 match possibilities.as_slice() {
                     &[] => {}
                     &[x] => {
-                        diag.span_note(self.span, format!("the only valid argument here is {quote}{x}{quote}"));
+                        diag.span_note(
+                            self.span,
+                            format!("the only valid argument here is {quote}{x}{quote}"),
+                        );
                     }
                     [first, second] => {
                         diag.span_note(self.span, format!("valid arguments are {quote}{first}{quote} or {quote}{second}{quote}"));
                     }
-                    [first@.., second_to_last, last] => {
+                    [first @ .., second_to_last, last] => {
                         let mut res = String::new();
                         for i in first {
                             res.push_str(&format!("{quote}{i}{quote}, "));
                         }
-                        res.push_str(&format!("{quote}{second_to_last}{quote} or {quote}{last}{quote}"));
+                        res.push_str(&format!(
+                            "{quote}{second_to_last}{quote} or {quote}{last}{quote}"
+                        ));
 
                         diag.span_note(self.span, format!("valid arguments are {res}"));
                     }
                 }
-            },
+            }
         }
 
         let suggestions = self.template.suggestions(false, &name);
-        diag.span_suggestions(self.attr_span, if suggestions.len() == 1 {
-            "must be of the form"
-        } else {
-            "try changing it to one of the following valid forms of the attribute"
-        }, suggestions, Applicability::HasPlaceholders);
+        diag.span_suggestions(
+            self.attr_span,
+            if suggestions.len() == 1 {
+                "must be of the form"
+            } else {
+                "try changing it to one of the following valid forms of the attribute"
+            },
+            suggestions,
+            Applicability::HasPlaceholders,
+        );
 
         diag
     }

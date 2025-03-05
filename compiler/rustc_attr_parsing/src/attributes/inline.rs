@@ -4,7 +4,7 @@
 
 use rustc_attr_data_structures::{AttributeKind, InlineAttr};
 use rustc_errors::DiagArgValue;
-use rustc_feature::{template, AttributeTemplate};
+use rustc_feature::{AttributeTemplate, template};
 use rustc_session::lint::builtin::ILL_FORMED_ATTRIBUTE_INPUT;
 use rustc_span::sym;
 
@@ -45,16 +45,17 @@ impl<S: Stage> SingleAttributeParser<S> for InlineParser {
                 }
             }
             ArgParser::NameValue(_) => {
-                let suggestions = <Self as SingleAttributeParser<S>>::TEMPLATE.suggestions(false, "inline");
+                let suggestions =
+                    <Self as SingleAttributeParser<S>>::TEMPLATE.suggestions(false, "inline");
                 cx.emit_lint(
                     ILL_FORMED_ATTRIBUTE_INPUT,
                     cx.attr_span,
-              IllFormedAttributeInput {
+                    IllFormedAttributeInput {
                         num_suggestions: suggestions.len(),
                         suggestions: DiagArgValue::StrListSepByAnd(
                             suggestions.into_iter().map(|s| format!("`{s}`").into()).collect(),
                         ),
-                    }
+                    },
                 );
                 return None;
             }
@@ -96,6 +97,9 @@ impl<S: Stage> SingleAttributeParser<S> for RustcForceInlineParser {
             }
         };
 
-        Some(AttributeKind::Inline(InlineAttr::Force { attr_span: cx.attr_span, reason }, cx.attr_span))
+        Some(AttributeKind::Inline(
+            InlineAttr::Force { attr_span: cx.attr_span, reason },
+            cx.attr_span,
+        ))
     }
 }

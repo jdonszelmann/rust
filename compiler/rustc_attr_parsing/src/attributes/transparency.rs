@@ -1,5 +1,5 @@
 use rustc_attr_data_structures::AttributeKind;
-use rustc_feature::{template, AttributeTemplate};
+use rustc_feature::{AttributeTemplate, template};
 use rustc_span::hygiene::Transparency;
 use rustc_span::sym;
 
@@ -18,7 +18,8 @@ impl<S: Stage> SingleAttributeParser<S> for TransparencyParser {
     const ON_DUPLICATE: OnDuplicate<S> = OnDuplicate::Custom(|cx, used, unused| {
         cx.dcx().span_err(vec![used, unused], "multiple macro transparency attributes");
     });
-    const TEMPLATE: AttributeTemplate = template!(NameValueStr: "transparent|semitransparent|opaque");
+    const TEMPLATE: AttributeTemplate =
+        template!(NameValueStr: "transparent|semitransparent|opaque");
 
     fn convert(cx: &AcceptContext<'_, '_, S>, args: &ArgParser<'_>) -> Option<AttributeKind> {
         let Some(nv) = args.name_value() else {
@@ -30,7 +31,10 @@ impl<S: Stage> SingleAttributeParser<S> for TransparencyParser {
             Some(sym::semitransparent) => Some(Transparency::SemiTransparent),
             Some(sym::opaque) => Some(Transparency::Opaque),
             Some(_) => {
-                cx.expected_specific_argument_strings(nv.value_span, vec!["transparent", "semitransparent", "opaque"]);
+                cx.expected_specific_argument_strings(
+                    nv.value_span,
+                    vec!["transparent", "semitransparent", "opaque"],
+                );
                 None
             }
             None => None,

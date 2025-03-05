@@ -10,7 +10,7 @@ use std::collections::hash_map::Entry;
 
 use rustc_abi::{Align, ExternAbi, Size};
 use rustc_ast::{AttrStyle, LitKind, MetaItemInner, MetaItemKind, MetaItemLit, ast};
-use rustc_attr_parsing::{find_attr, AttributeKind, InlineAttr, ReprAttr};
+use rustc_attr_parsing::{AttributeKind, InlineAttr, ReprAttr, find_attr};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::{Applicability, DiagCtxtHandle, IntoDiagArg, MultiSpan, StashKey};
 use rustc_feature::{AttributeDuplicates, AttributeType, BUILTIN_ATTRIBUTE_MAP, BuiltinAttribute};
@@ -123,7 +123,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     AttributeKind::Stability { span, .. }
                     | AttributeKind::ConstStability { span, .. },
                 ) => self.check_stability_promotable(*span, target),
-                Attribute::Parsed(AttributeKind::Inline(InlineAttr::Force {..}, ..)) => {} // handled separately below
+                Attribute::Parsed(AttributeKind::Inline(InlineAttr::Force { .. }, ..)) => {} // handled separately below
                 Attribute::Parsed(AttributeKind::Inline(_, attr_span)) => {
                     self.check_inline(hir_id, *attr_span, span, target)
                 }
@@ -617,9 +617,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         ) => {
                             continue;
                         }
-                        Attribute::Parsed(
-                            AttributeKind::Inline(.., span),
-                        ) => {
+                        Attribute::Parsed(AttributeKind::Inline(.., span)) => {
                             self.dcx().emit_err(errors::NakedFunctionIncompatibleAttribute {
                                 span: *span,
                                 naked_span: attr.span(),
@@ -2561,7 +2559,10 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         span: Span,
         target: Target,
     ) {
-        match (target, find_attr!(attrs, AttributeKind::Inline(InlineAttr::Force { attr_span, .. }, _) => *attr_span)) {
+        match (
+            target,
+            find_attr!(attrs, AttributeKind::Inline(InlineAttr::Force { attr_span, .. }, _) => *attr_span),
+        ) {
             (Target::Closure, None) => {
                 let is_coro = matches!(
                     self.tcx.hir().expect_expr(hir_id).kind,
@@ -2577,13 +2578,10 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 if let Some(attr_span) = find_attr!(
                     self.tcx.get_all_attrs(parent_did),
                     AttributeKind::Inline(InlineAttr::Force { attr_span, .. }, _) => *attr_span
-                )
-                    && is_coro
+                ) && is_coro
                 {
-                    self.dcx().emit_err(errors::RustcForceInlineCoro {
-                        attr_span,
-                        span: parent_span,
-                    });
+                    self.dcx()
+                        .emit_err(errors::RustcForceInlineCoro { attr_span, span: parent_span });
                 }
             }
             (Target::Fn, _) => (),
@@ -2784,7 +2782,8 @@ fn check_invalid_crate_level_attr(tcx: TyCtxt<'_>, attrs: &[Attribute]) {
 fn check_non_exported_macro_for_invalid_attrs(tcx: TyCtxt<'_>, item: &Item<'_>) {
     let attrs = tcx.hir().attrs(item.hir_id());
 
-    if let Some(attr_span) = find_attr!(attrs, AttributeKind::Inline(i, span) if !matches!(i, InlineAttr::Force{..}) => *span) {
+    if let Some(attr_span) = find_attr!(attrs, AttributeKind::Inline(i, span) if !matches!(i, InlineAttr::Force{..}) => *span)
+    {
         tcx.dcx().emit_err(errors::NonExportedMacroInvalidAttrs { attr_span });
     }
 }
