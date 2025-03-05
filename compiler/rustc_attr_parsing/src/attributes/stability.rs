@@ -218,10 +218,7 @@ fn insert_value_into_option_or_error<S: Stage>(
         *item = Some(s);
         Some(())
     } else {
-        cx.emit_err(session_diagnostics::IncorrectMetaItem {
-            span: param.span(),
-            suggestion: None,
-        });
+        cx.expected_name_value(param.span());
         None
     }
 }

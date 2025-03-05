@@ -16,9 +16,7 @@ pub(crate) struct ConfusablesParser {
 impl<S: Stage> AttributeParser<S> for ConfusablesParser {
     const ATTRIBUTES: AcceptMapping<Self, S> = &[(&[sym::rustc_confusables], template!(List: r#""name1", "name2", ..."#), |this, cx, args| {
         let Some(list) = args.list() else {
-            // FIXME(jdonszelmann): error when not a list? Bring validation code here.
-            //       NOTE: currently subsequent attributes are silently ignored using
-            //       tcx.get_attr().
+            cx.expected_list(cx.attr_span);
             return;
         };
 
@@ -30,13 +28,7 @@ impl<S: Stage> AttributeParser<S> for ConfusablesParser {
             let span = param.span();
 
             let Some(lit) = param.lit() else {
-                cx.emit_err(session_diagnostics::IncorrectMetaItem {
-                    span,
-                    suggestion: Some(session_diagnostics::IncorrectMetaItemSuggestion {
-                        lo: span.shrink_to_lo(),
-                        hi: span.shrink_to_hi(),
-                    }),
-                });
+                cx.expected_string_literal(span);
                 continue;
             };
 

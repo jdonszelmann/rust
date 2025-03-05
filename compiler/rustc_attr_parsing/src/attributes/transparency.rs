@@ -21,12 +21,16 @@ impl<S: Stage> SingleAttributeParser<S> for TransparencyParser {
     const TEMPLATE: AttributeTemplate = template!(NameValueStr: "transparent|semitransparent|opaque");
 
     fn convert(cx: &AcceptContext<'_, '_, S>, args: &ArgParser<'_>) -> Option<AttributeKind> {
-        match args.name_value().and_then(|nv| nv.value_as_str()) {
+        let Some(nv) = args.name_value() else {
+            cx.expected_name_value(cx.attr_span);
+            return None;
+        };
+        match nv.value_as_str() {
             Some(sym::transparent) => Some(Transparency::Transparent),
             Some(sym::semitransparent) => Some(Transparency::SemiTransparent),
             Some(sym::opaque) => Some(Transparency::Opaque),
-            Some(other) => {
-                cx.dcx().span_err(cx.attr_span, format!("unknown macro transparency: `{other}`"));
+            Some(_) => {
+                cx.expected_specific_argument_strings(nv.value_span, vec!["transparent", "semitransparent", "opaque"]);
                 None
             }
             None => None,

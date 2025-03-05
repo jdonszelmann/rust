@@ -40,8 +40,7 @@ fn get<S: Stage>(
             None
         }
     } else {
-        // FIXME(jdonszelmann): suggestion?
-        cx.emit_err(session_diagnostics::IncorrectMetaItem { span: param_span, suggestion: None });
+        cx.expected_name_value(param_span);
         None
     }
 }
@@ -103,15 +102,15 @@ impl<S: Stage> SingleAttributeParser<S> for DeprecationParser {
                         suggestion = Some(get(cx, ident, param_span, arg, &suggestion)?);
                     }
                     _ => {
-                        cx.emit_err(session_diagnostics::UnknownMetaItem {
-                            span: param_span,
-                            item: ident.to_string(),
-                            expected: if features.deprecated_suggestion() {
+                        cx.unknown_key(
+                            param_span,
+                            ident.to_string(),
+                            if features.deprecated_suggestion() {
                                 &["since", "note", "suggestion"]
                             } else {
                                 &["since", "note"]
                             },
-                        });
+                        );
                         return None;
                     }
                 }
