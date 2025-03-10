@@ -25,6 +25,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
+use rustc_span::EiiId,
 
 use diagnostics::{ImportSuggestion, LabelSuggestion, Suggestion};
 use effective_visibilities::EffectiveVisibilitiesVisitor;
@@ -1227,6 +1228,9 @@ pub struct Resolver<'ra, 'tcx> {
     current_crate_outer_attr_insert_span: Span,
 
     mods_with_parse_errors: FxHashSet<DefId>,
+
+    /// Map of defids for all items marked with #[eii(<eii id>)].
+    eii: FxHashMap<EiiId, DefId>,
 }
 
 /// This provides memory for the rest of the crate. The `'ra` lifetime that is
