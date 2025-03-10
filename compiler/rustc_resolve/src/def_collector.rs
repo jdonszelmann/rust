@@ -138,6 +138,7 @@ impl<'a, 'ra, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'ra, 'tcx> {
                     &i.attrs,
                     i.span,
                     OmitDoc::Skip,
+                    None,
                     std::convert::identity,
                 );
 

@@ -457,7 +457,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     }
 
     /// Checks if an `#[inline]` is applied to a function or a closure.
-    fn check_eii(&self, _hir_id: HirId, attr_span: Span, _defn_span: Span, target: Target) {
+    fn check_eii(&self, _hir_id: HirId, _attr_span: Span, _defn_span: Span, target: Target) {
         match target {
             Target::ForeignFn => {}
             target => {

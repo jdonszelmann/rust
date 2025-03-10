@@ -213,7 +213,6 @@ impl<'sess> AttributeParser<'sess> {
         attrs: &'a [ast::Attribute],
         target_span: Span,
         omit_doc: OmitDoc,
-
         lower_span: impl Copy + Fn(Span) -> Span,
     ) -> Vec<Attribute> {
         let mut attributes = Vec::new();
