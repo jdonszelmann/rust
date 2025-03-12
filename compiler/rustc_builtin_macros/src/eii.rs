@@ -31,7 +31,7 @@ pub(crate) fn eii_macro(
 
     assert!(meta_item.is_word());
 
-    f.eii_impl.push((DUMMY_NODE_ID, meta_item.clone()));
+    f.eii_impl.push((DUMMY_NODE_ID, meta_item.path.clone()));
 
     vec![item]
 }

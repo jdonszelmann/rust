@@ -149,21 +149,57 @@ impl<'hir> LoweringContext<'_, 'hir> {
         }
     }
 
+    fn generate_extra_attrs_for_item_kind(
+        &mut self,
+        id: NodeId,
+        i: &ItemKind,
+    ) -> Vec<hir::Attribute> {
+        match i {
+            ItemKind::Fn(box Fn { eii_impl, .. }) => {
+                let mut res = Vec::new();
+
+                for (id, path) in eii_impl {
+                    let did = self.lower_path_simple_eii(*id, path);
+                    res.push(hir::Attribute::Parsed(AttributeKind::EiiImpl { eii_macro: did }));
+                }
+
+                res
+            }
+            ItemKind::MacroDef(MacroDef { eii_macro_for: Some(path), .. }) => {
+                vec![hir::Attribute::Parsed(AttributeKind::EiiMacroFor {
+                    eii_extern_item: self.lower_path_simple_eii(id, path),
+                })]
+            }
+            ItemKind::ExternCrate(..)
+            | ItemKind::Use(..)
+            | ItemKind::Static(..)
+            | ItemKind::Const(..)
+            | ItemKind::Mod(..)
+            | ItemKind::ForeignMod(..)
+            | ItemKind::GlobalAsm(..)
+            | ItemKind::TyAlias(..)
+            | ItemKind::Enum(..)
+            | ItemKind::Struct(..)
+            | ItemKind::Union(..)
+            | ItemKind::Trait(..)
+            | ItemKind::TraitAlias(..)
+            | ItemKind::Impl(..)
+            | ItemKind::MacCall(..)
+            | ItemKind::MacroDef(..)
+            | ItemKind::Delegation(..)
+            | ItemKind::DelegationMac(..) => Vec::new(),
+        }
+    }
+
     fn lower_item(&mut self, i: &Item) -> &'hir hir::Item<'hir> {
         let vis_span = self.lower_span(i.vis.span);
         let hir_id = hir::HirId::make_owner(self.current_hir_id_owner.def_id);
 
-        let mut extra_hir_attributes = Vec::new();
-        if let ItemKind::Fn(f) = &i.kind {
-            extra_hir_attributes.extend(f.eii_impl.iter().map(|(id, mi)| {
-                let did = self.lower_path_simple_eii(*id, &mi.path);
-
-                hir::Attribute::Parsed(AttributeKind::EiiImpl { eii_macro: did })
-            }));
-        }
+        let extra_hir_attributes = self.generate_extra_attrs_for_item_kind(i.id, &i.kind);
 
         let attrs = self.lower_attrs(hir_id, &i.attrs, i.span, &extra_hir_attributes);
         let kind = self.lower_item_kind(i.span, i.id, hir_id, i.ident, attrs, vis_span, &i.kind);
+
         let item = hir::Item {
             owner_id: hir_id.expect_owner(),
             kind,
@@ -230,7 +266,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 body,
                 contract,
                 define_opaque,
-                eii_impl,
                 ..
             }) => {
                 debug_assert_ne!(ident.name, kw::Empty);
@@ -485,7 +520,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 );
                 hir::ItemKind::TraitAlias(ident, generics, bounds)
             }
-            ItemKind::MacroDef(MacroDef { body, macro_rules, eii_macro_for }) => {
+            ItemKind::MacroDef(MacroDef { body, macro_rules, eii_macro_for: _ }) => {
                 debug_assert_ne!(ident.name, kw::Empty);
                 let ident = self.lower_ident(ident);
                 let body = P(self.lower_delim_args(body));
@@ -504,14 +539,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     eii_macro_for: None,
                 });
 
-                hir::ItemKind::Macro {
-                    name: ident,
-                    ast_macro_def,
-                    kind: macro_kind,
-                    eii_macro_for: eii_macro_for
-                        .as_ref()
-                        .map(|path| self.lower_path_simple_eii(id, path)),
-                }
+                hir::ItemKind::Macro(ident, ast_macro_def, macro_kind)
             }
             ItemKind::Delegation(box delegation) => {
                 debug_assert_ne!(ident.name, kw::Empty);

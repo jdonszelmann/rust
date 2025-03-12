@@ -981,9 +981,9 @@ fn walk_fn<T: MutVisitor>(vis: &mut T, kind: FnKind<'_>) {
             // Identifier and visibility are visited as a part of the item.
             visit_defaultness(vis, defaultness);
 
-            for (node_id, mi) in eii_impl {
+            for (node_id, path) in eii_impl {
                 vis.visit_id(node_id);
-                vis.visit_path(&mut mi.path);
+                vis.visit_path(path);
             }
             vis.visit_fn_header(header);
             vis.visit_generics(generics);

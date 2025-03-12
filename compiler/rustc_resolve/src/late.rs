@@ -1061,8 +1061,8 @@ impl<'ra: 'ast, 'ast, 'tcx> Visitor<'ast> for LateResolutionVisitor<'_, 'ast, 'r
         debug!("(resolving function) entering function");
 
         if let FnKind::Fn(_, _, _, f) = fn_kind {
-            for (id, mi) in &f.eii_impl {
-                self.smart_resolve_path(*id, &None, &mi.path, PathSource::Macro);
+            for (id, path) in &f.eii_impl {
+                self.smart_resolve_path(*id, &None, &path, PathSource::Macro);
             }
         }
 
