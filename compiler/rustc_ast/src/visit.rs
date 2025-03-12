@@ -930,9 +930,15 @@ pub fn walk_fn<'a, V: Visitor<'a>>(visitor: &mut V, kind: FnKind<'a>) -> V::Resu
                 contract,
                 body,
                 define_opaque,
+                eii_impl,
             },
         ) => {
             // Identifier and visibility are visited as a part of the item.
+
+            for (node_id, mi) in eii_impl {
+                try_visit!(visitor.visit_path(&mi.path, *node_id));
+            }
+
             try_visit!(visitor.visit_fn_header(header));
             try_visit!(visitor.visit_generics(generics));
             try_visit!(visitor.visit_fn_decl(decl));

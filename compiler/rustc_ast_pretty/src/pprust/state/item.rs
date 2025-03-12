@@ -678,9 +678,16 @@ impl<'a> State<'a> {
         attrs: &[ast::Attribute],
         func: &ast::Fn,
     ) {
-        let ast::Fn { defaultness, generics, sig, contract, body, define_opaque } = func;
+        let ast::Fn { defaultness, generics, sig, contract, body, define_opaque, eii_impl } = func;
 
         self.print_define_opaques(define_opaque.as_deref());
+
+        for (_, mi) in eii_impl {
+            self.word("#[");
+            self.print_meta_item(mi);
+            self.word("]");
+            self.hardbreak();
+        }
 
         if body.is_some() {
             self.head("");

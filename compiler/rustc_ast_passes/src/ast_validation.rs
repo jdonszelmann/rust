@@ -918,10 +918,21 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                 return; // Avoid visiting again.
             }
             ItemKind::Fn(
-                func
-                @ box Fn { defaultness, generics: _, sig, contract: _, body, define_opaque: _ },
+                func @ box Fn {
+                    defaultness,
+                    generics: _,
+                    sig,
+                    contract: _,
+                    body,
+                    define_opaque: _,
+                    eii_impl,
+                },
             ) => {
                 self.check_defaultness(item.span, *defaultness);
+
+                for (id, mi) in eii_impl {
+                    self.visit_path(&mi.path, *id);
+                }
 
                 let is_intrinsic =
                     item.attrs.iter().any(|a| a.name_or_empty() == sym::rustc_intrinsic);
