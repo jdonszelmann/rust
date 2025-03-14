@@ -1,6 +1,6 @@
 use rustc_ast::{DUMMY_NODE_ID, EIIImpl, EiiMacroFor, ItemKind, ast};
 use rustc_expand::base::{Annotatable, ExtCtxt};
-use rustc_span::{Span, Span, kw};
+use rustc_span::{Span, kw};
 
 pub(crate) fn eii_macro_for(
     ecx: &mut ExtCtxt<'_>,
