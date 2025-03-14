@@ -930,8 +930,8 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
             ) => {
                 self.check_defaultness(item.span, *defaultness);
 
-                for (id, path) in eii_impl {
-                    self.visit_path(path, *id);
+                for EIIImpl { node_id, eii_macro_path, .. } in eii_impl {
+                    self.visit_path(eii_macro_path, *node_id);
                 }
 
                 let is_intrinsic =
