@@ -157,7 +157,15 @@ impl<'hir> LoweringContext<'_, 'hir> {
         match i {
             ItemKind::Fn(box Fn { eii_impl, .. }) => {
                 let mut eii_impls = ThinVec::new();
-                for EIIImpl { node_id, eii_macro_path, impl_safety, span, inner_span } in eii_impl {
+                for EIIImpl {
+                    node_id,
+                    eii_macro_path,
+                    impl_safety,
+                    span,
+                    inner_span,
+                    is_default,
+                } in eii_impl
+                {
                     let did = self.lower_path_simple_eii(*node_id, eii_macro_path);
                     eii_impls.push(rustc_attr_parsing::EIIImpl {
                         eii_macro: did,
@@ -166,13 +174,14 @@ impl<'hir> LoweringContext<'_, 'hir> {
                         impl_marked_unsafe: self
                             .lower_safety(*impl_safety, hir::Safety::Safe)
                             .is_unsafe(),
+                        is_default: *is_default,
                     })
                 }
 
                 vec![hir::Attribute::Parsed(AttributeKind::EiiImpl(eii_impls))]
             }
             ItemKind::MacroDef(MacroDef {
-                eii_macro_for: Some(EiiMacroFor { extern_item_path, impl_unsafe }),
+                eii_macro_for: Some(EIIMacroFor { extern_item_path, impl_unsafe }),
                 ..
             }) => {
                 vec![hir::Attribute::Parsed(AttributeKind::EiiMacroFor {
