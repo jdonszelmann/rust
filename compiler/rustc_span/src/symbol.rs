@@ -2202,6 +2202,7 @@ symbols! {
         unsafe_block_in_unsafe_fn,
         unsafe_cell,
         unsafe_cell_raw_get,
+        unsafe_eii,
         unsafe_extern_blocks,
         unsafe_fields,
         unsafe_no_drop_flag,
