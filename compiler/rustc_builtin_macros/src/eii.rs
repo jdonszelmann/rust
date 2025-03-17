@@ -1,10 +1,209 @@
-use rustc_ast::{
-    DUMMY_NODE_ID, DUMMY_NODE_ID, EIIImpl, EIIImpl, EIIMacroFor, EiiMacroFor, ItemKind, ItemKind,
-    ast, ast,
-};
+use rustc_ast::ptr::P;
+use rustc_ast::token::{Delimiter, TokenKind};
+use rustc_ast::tokenstream::{DelimSpacing, DelimSpan, Spacing, TokenStream, TokenTree};
+use rustc_ast::{DUMMY_NODE_ID, EIIImpl, EIIMacroFor, ItemKind, ast, token, tokenstream};
 use rustc_ast_pretty::pprust::path_to_string;
 use rustc_expand::base::{Annotatable, ExtCtxt};
-use rustc_span::{Span, Span, kw, kw};
+use rustc_span::{Ident, Span, kw, sym};
+
+/* ```rust
+
+#[eii]
+fn panic_handler();
+
+#[eii(panic_handler)]
+fn panic_handler();
+
+#[eii(panic_handler, unsafe)]
+fn panic_handler();
+
+// expansion:
+
+extern "Rust" {
+    fn panic_handler();
+}
+
+#[rustc_builtin_macro(eii_macro)] // eii_macro_for: panic_handler
+macro panic_handler() {}
+
+``` */
+pub(crate) fn eii(
+    ecx: &mut ExtCtxt<'_>,
+    span: Span,
+    meta_item: &ast::MetaItem,
+    item: Annotatable,
+) -> Vec<Annotatable> {
+    let span = ecx.with_def_site_ctxt(span);
+
+    let Annotatable::Item(item) = item else {
+        ecx.dcx()
+            .emit_err(EIIMacroExpectedFunction { span, name: path_to_string(&meta_item.path) });
+        return vec![item];
+    };
+
+    let macro_name = if meta_item.is_word() {
+        item.ident
+    } else if let Some([first]) = meta_item.meta_item_list()
+        && let Some(m) = first.meta_item()
+        && m.path.segments.len() == 1
+    {
+        m.path.segments[0].ident
+    } else {
+        ecx.dcx().emit_err(EIIMacroExpectedMaxOneArgument {
+            span: meta_item.span,
+            name: path_to_string(&meta_item.path),
+        });
+        return vec![Annotatable::Item(item)];
+    };
+
+    let item = item.into_inner();
+
+    let ast::Item {
+        attrs,
+        id: _,
+        span: item_span,
+        vis,
+        ident: item_name,
+        kind: ItemKind::Fn(mut func),
+        tokens: _,
+    } = item
+    else {
+        ecx.dcx()
+            .emit_err(EIIMacroExpectedFunction { span, name: path_to_string(&meta_item.path) });
+        return vec![Annotatable::Item(P(item))];
+    };
+
+    let impl_unsafe = false; // TODO
+
+    let abi = match func.sig.header.ext {
+        // extern "X" fn  =>  extern "X" {}
+        ast::Extern::Explicit(lit, _) => Some(lit),
+        // extern fn  =>  extern {}
+        ast::Extern::Implicit(_) => None,
+        // fn  =>  extern "Rust" {}
+        ast::Extern::None => Some(ast::StrLit {
+            symbol: sym::Rust,
+            suffix: None,
+            symbol_unescaped: sym::Rust,
+            style: ast::StrStyle::Cooked,
+            span,
+        }),
+    };
+
+    // ABI has been moved to the extern {} block, so we remove it from the fn item.
+    func.sig.header.ext = ast::Extern::None;
+
+    // And mark safe functions explicitly as `safe fn`.
+    if func.sig.header.safety == ast::Safety::Default {
+        func.sig.header.safety = ast::Safety::Safe(func.sig.span);
+    }
+
+    // extern "…" { safe fn item(); }
+    let extern_block = Annotatable::Item(P(ast::Item {
+        attrs: ast::AttrVec::default(),
+        id: ast::DUMMY_NODE_ID,
+        span,
+        vis: ast::Visibility { span, kind: ast::VisibilityKind::Inherited, tokens: None },
+        ident: Ident::dummy(),
+        kind: ast::ItemKind::ForeignMod(ast::ForeignMod {
+            extern_span: span,
+            safety: ast::Safety::Unsafe(span),
+            abi,
+            items: From::from([P(ast::ForeignItem {
+                attrs,
+                id: ast::DUMMY_NODE_ID,
+                span: item_span,
+                vis,
+                ident: item_name,
+                kind: ast::ForeignItemKind::Fn(func),
+                tokens: None,
+            })]),
+        }),
+        tokens: None,
+    }));
+
+    let macro_def = Annotatable::Item(P(ast::Item {
+        attrs: ast::AttrVec::from_iter([
+            // #[eii_macro_for(item_name)]
+            ast::Attribute {
+                kind: ast::AttrKind::Normal(P(ast::NormalAttr {
+                    item: ast::AttrItem {
+                        unsafety: ast::Safety::Default,
+                        path: ast::Path::from_ident(Ident::new(sym::eii_macro_for, span)),
+                        args: ast::AttrArgs::Delimited(ast::DelimArgs {
+                            dspan: DelimSpan::from_single(span),
+                            delim: Delimiter::Parenthesis,
+                            tokens: TokenStream::new(vec![tokenstream::TokenTree::Token(
+                                token::Token::from_ast_ident(item_name),
+                                Spacing::Alone,
+                            )]),
+                        }),
+                        tokens: None,
+                    },
+                    tokens: None,
+                })),
+                id: ecx.sess.psess.attr_id_generator.mk_attr_id(),
+                style: ast::AttrStyle::Outer,
+                span,
+            },
+            // #[builtin_macro(eii_macro)]
+            ast::Attribute {
+                kind: ast::AttrKind::Normal(P(ast::NormalAttr {
+                    item: ast::AttrItem {
+                        unsafety: ast::Safety::Default,
+                        path: ast::Path::from_ident(Ident::new(sym::rustc_builtin_macro, span)),
+                        args: ast::AttrArgs::Delimited(ast::DelimArgs {
+                            dspan: DelimSpan::from_single(span),
+                            delim: Delimiter::Parenthesis,
+                            tokens: TokenStream::new(vec![tokenstream::TokenTree::token_alone(
+                                token::TokenKind::Ident(sym::eii_macro, token::IdentIsRaw::No),
+                                span,
+                            )]),
+                        }),
+                        tokens: None,
+                    },
+                    tokens: None,
+                })),
+                id: ecx.sess.psess.attr_id_generator.mk_attr_id(),
+                style: ast::AttrStyle::Outer,
+                span,
+            },
+        ]),
+        id: ast::DUMMY_NODE_ID,
+        span,
+        // pub
+        vis: ast::Visibility { span, kind: ast::VisibilityKind::Public, tokens: None },
+        // macro macro_name
+        ident: macro_name,
+        kind: ast::ItemKind::MacroDef(ast::MacroDef {
+            // { () => {} }
+            body: P(ast::DelimArgs {
+                dspan: DelimSpan::from_single(span),
+                delim: Delimiter::Brace,
+                tokens: TokenStream::from_iter([
+                    TokenTree::Delimited(
+                        DelimSpan::from_single(span),
+                        DelimSpacing::new(Spacing::Alone, Spacing::Alone),
+                        Delimiter::Parenthesis,
+                        TokenStream::default(),
+                    ),
+                    TokenTree::token_alone(TokenKind::FatArrow, span),
+                    TokenTree::Delimited(
+                        DelimSpan::from_single(span),
+                        DelimSpacing::new(Spacing::Alone, Spacing::Alone),
+                        Delimiter::Brace,
+                        TokenStream::default(),
+                    ),
+                ]),
+            }),
+            macro_rules: false,
+            eii_macro_for: None,
+        }),
+        tokens: None,
+    }));
+
+    vec![extern_block, macro_def]
+}
 
 use crate::errors::{
     EIIMacroExpectedFunction, EIIMacroExpectedMaxOneArgument, EIIMacroForExpectedList,

@@ -2,20 +2,15 @@ use std::borrow::Cow;
 use std::iter;
 
 use rustc_data_structures::fx::FxIndexSet;
-use rustc_errors::{
-    Applicability, E0050, E0053, E0053, E0053, struct_span_code_err, struct_span_code_err,
-    struct_span_code_err,
-};
+use rustc_errors::{Applicability, E0050, E0053, struct_span_code_err};
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_hir::{
-    self as hir, self as hir, self as hir, FnSig, HirId, HirId, HirId, ItemKind, ItemKind, ItemKind,
-};
+use rustc_hir::{self as hir, FnSig, HirId, ItemKind};
 use rustc_infer::infer::{self, InferCtxt, TyCtxtInferExt};
 use rustc_infer::traits::{ObligationCause, ObligationCauseCode};
 use rustc_middle::ty;
 use rustc_middle::ty::TyCtxt;
-use rustc_middle::ty::error::{ExpectedFound, TypeError, TypeError, TypeError};
-use rustc_span::{ErrorGuaranteed, Ident, Span};
+use rustc_middle::ty::error::{ExpectedFound, TypeError};
+use rustc_span::{ErrorGuaranteed, Ident, Span, Symbol};
 use rustc_trait_selection::error_reporting::InferCtxtErrorExt;
 use rustc_trait_selection::regions::InferCtxtRegionExt;
 use rustc_trait_selection::traits::ObligationCtxt;
