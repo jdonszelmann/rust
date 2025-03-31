@@ -77,7 +77,7 @@ fn eii_(
     let item = item.into_inner();
 
     let ast::Item {
-        attrs,
+        mut attrs,
         id: _,
         span: item_span,
         vis,
@@ -145,7 +145,6 @@ fn eii_(
                             rules: ast::BlockCheckMode::Default,
                             span,
                             tokens: None,
-                            could_be_bare_literal: false,
                         }),
                         None,
                     ),
@@ -153,6 +152,7 @@ fn eii_(
                     attrs: ThinVec::new(),
                     tokens: None,
                 })),
+                define_opaque: None,
             })),
             tokens: None,
         })))
@@ -184,6 +184,21 @@ fn eii_(
     }
 
     // extern "…" { safe fn item(); }
+    // #[eii_mangle_extern]
+    attrs.push(ast::Attribute {
+        kind: ast::AttrKind::Normal(P(ast::NormalAttr {
+            item: ast::AttrItem {
+                unsafety: ast::Safety::Default,
+                path: ast::Path::from_ident(Ident::new(sym::eii_mangle_extern, span)),
+                args: ast::AttrArgs::Empty,
+                tokens: None,
+            },
+            tokens: None,
+        })),
+        id: ecx.sess.psess.attr_id_generator.mk_attr_id(),
+        style: ast::AttrStyle::Outer,
+        span,
+    });
     let extern_block = Annotatable::Item(P(ast::Item {
         attrs: ast::AttrVec::default(),
         id: ast::DUMMY_NODE_ID,
@@ -264,6 +279,7 @@ fn eii_(
             eii_macro_for: Some(ast::EIIMacroFor {
                 extern_item_path: ast::Path::from_ident(item_name),
                 impl_unsafe,
+                span: decl_span,
             }),
         }),
         tokens: None,
@@ -322,7 +338,7 @@ pub(crate) fn eii_macro_for(
         false
     };
 
-    d.eii_macro_for = Some(EIIMacroFor { extern_item_path, impl_unsafe });
+    d.eii_macro_for = Some(EIIMacroFor { extern_item_path, impl_unsafe, span });
 
     // Return the original item and the new methods.
     vec![item]

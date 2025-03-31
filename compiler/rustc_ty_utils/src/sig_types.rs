@@ -123,7 +123,8 @@ pub fn walk_types<'tcx, V: SpannedTypeVisitor<'tcx>>(
         | DefKind::Macro(_)
         | DefKind::GlobalAsm
         | DefKind::Mod
-        | DefKind::Use => {}
+        | DefKind::Use
+        | DefKind::EiiShim => {}
     }
     V::Result::output()
 }

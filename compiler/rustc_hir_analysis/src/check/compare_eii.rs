@@ -7,9 +7,8 @@ use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::{self as hir, FnSig, HirId, ItemKind};
 use rustc_infer::infer::{self, InferCtxt, TyCtxtInferExt};
 use rustc_infer::traits::{ObligationCause, ObligationCauseCode};
-use rustc_middle::ty::{self, TypingMode};
-use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::error::{ExpectedFound, TypeError};
+use rustc_middle::ty::{self, TyCtxt, TypingMode};
 use rustc_span::{ErrorGuaranteed, Ident, Span, Symbol};
 use rustc_trait_selection::error_reporting::InferCtxtErrorExt;
 use rustc_trait_selection::regions::InferCtxtRegionExt;
@@ -374,10 +373,7 @@ fn extract_spans_for_error_reporting<'tcx>(
     let (mut external_impl_args, external_impl_name) = {
         let item = tcx.hir_expect_item(external_impl);
         let (ident, sig, _, _) = item.expect_fn();
-        (
-            sig.decl.inputs.iter().map(|t| t.span).chain(iter::once(sig.decl.output.span())),
-            ident,
-        )
+        (sig.decl.inputs.iter().map(|t| t.span).chain(iter::once(sig.decl.output.span())), ident)
     };
 
     let declaration_args = declaration.as_local().map(|def_id| {

@@ -342,7 +342,8 @@ fn opaque_types_defined_by<'tcx>(
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::Impl { .. }
-        | DefKind::SyntheticCoroutineBody => {}
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => {}
         // Closures and coroutines are type checked with their parent
         DefKind::Closure | DefKind::InlineConst => {
             collector.opaques.extend(tcx.opaque_types_defined_by(tcx.local_parent(item)));

@@ -606,6 +606,9 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         // We have already encoded some things. Get their combined size from the current position.
         stats.push(("preamble", self.position()));
 
+        let externally_implementable_items = stat!("externally-implementable-items", || self
+            .encode_externally_implementable_items());
+
         let (crate_deps, dylib_dependency_formats) =
             stat!("dep", || (self.encode_crate_deps(), self.encode_dylib_dependency_formats()));
 
@@ -710,6 +713,8 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
                 has_global_allocator: tcx.has_global_allocator(LOCAL_CRATE),
                 has_alloc_error_handler: tcx.has_alloc_error_handler(LOCAL_CRATE),
                 has_panic_handler: tcx.has_panic_handler(LOCAL_CRATE),
+                externally_implementable_items,
+
                 has_default_lib_allocator: ast::attr::contains_name(
                     attrs,
                     sym::default_lib_allocator,
@@ -882,7 +887,7 @@ fn should_encode_span(def_kind: DefKind) -> bool {
         | DefKind::Impl { .. }
         | DefKind::Closure
         | DefKind::SyntheticCoroutineBody => true,
-        DefKind::ForeignMod | DefKind::GlobalAsm => false,
+        DefKind::ForeignMod | DefKind::GlobalAsm | DefKind::EiiShim => false,
     }
 }
 
@@ -923,7 +928,8 @@ fn should_encode_attrs(def_kind: DefKind) -> bool {
         | DefKind::OpaqueTy
         | DefKind::LifetimeParam
         | DefKind::Static { nested: true, .. }
-        | DefKind::GlobalAsm => false,
+        | DefKind::GlobalAsm
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -959,7 +965,8 @@ fn should_encode_expn_that_defined(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::Closure
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -996,7 +1003,8 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::Impl { .. }
         | DefKind::Closure
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1032,7 +1040,8 @@ fn should_encode_stability(def_kind: DefKind) -> bool {
         | DefKind::GlobalAsm
         | DefKind::Closure
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1127,7 +1136,8 @@ fn should_encode_variances<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, def_kind: Def
         | DefKind::GlobalAsm
         | DefKind::Closure
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
         DefKind::TyAlias => tcx.type_alias_is_lazy(def_id),
     }
 }
@@ -1164,7 +1174,8 @@ fn should_encode_generics(def_kind: DefKind) -> bool {
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1225,7 +1236,8 @@ fn should_encode_type(tcx: TyCtxt<'_>, def_id: LocalDefId, def_kind: DefKind) ->
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
-        | DefKind::ExternCrate => false,
+        | DefKind::ExternCrate
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1261,7 +1273,8 @@ fn should_encode_fn_sig(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1296,7 +1309,8 @@ fn should_encode_constness(def_kind: DefKind) -> bool {
         | DefKind::ExternCrate
         | DefKind::Ctor(_, CtorKind::Const)
         | DefKind::Variant
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1330,7 +1344,8 @@ fn should_encode_const(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim => false,
     }
 }
 
@@ -1835,7 +1850,9 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
     fn encode_info_for_macro(&mut self, def_id: LocalDefId) {
         let tcx = self.tcx;
 
-        let hir::ItemKind::Macro(_, macro_def, _) = tcx.hir_expect_item(def_id).kind else { bug!() };
+        let hir::ItemKind::Macro(_, macro_def, _) = tcx.hir_expect_item(def_id).kind else {
+            bug!()
+        };
         self.tables.is_macro_rules.set(def_id.local_def_index, macro_def.macro_rules);
         record!(self.tables.macro_definition[def_id.to_def_id()] <- &*macro_def.body);
     }
@@ -1850,6 +1867,17 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         empty_proc_macro!(self);
         let foreign_modules = self.tcx.foreign_modules(LOCAL_CRATE);
         self.lazy_array(foreign_modules.iter().map(|(_, m)| m).cloned())
+    }
+
+    fn encode_externally_implementable_items(
+        &mut self,
+    ) -> LazyArray<(DefId, (EIIDecl, Vec<(DefId, EIIImpl)>))> {
+        empty_proc_macro!(self);
+        let externally_implementable_items = self.tcx.externally_implementable_items(LOCAL_CRATE);
+
+        self.lazy_array(externally_implementable_items.iter().map(|(decl_did, (decl, impls))| {
+            (*decl_did, (decl.clone(), impls.iter().map(|(impl_did, i)| (*impl_did, *i)).collect()))
+        }))
     }
 
     fn encode_hygiene(&mut self) -> (SyntaxContextTable, ExpnDataTable, ExpnHashTable) {

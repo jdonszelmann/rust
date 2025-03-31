@@ -642,7 +642,8 @@ impl<'tcx> Ty<'tcx> {
                 | DefKind::GlobalAsm
                 | DefKind::Impl { .. }
                 | DefKind::Closure
-                | DefKind::SyntheticCoroutineBody => {
+                | DefKind::SyntheticCoroutineBody
+                | DefKind::EiiShim { .. } => {
                     bug!("not an adt: {def:?} ({:?})", tcx.def_kind(def.did()))
                 }
             }

@@ -263,7 +263,8 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
                 | DefKind::GlobalAsm
                 | DefKind::Closure
                 | DefKind::SyntheticCoroutineBody
-                | DefKind::Impl { .. },
+                | DefKind::Impl { .. }
+                | DefKind::EiiShim,
                 _,
             )
             | Res::Local(..)
