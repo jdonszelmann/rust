@@ -204,7 +204,7 @@ fn eii_(
         id: ast::DUMMY_NODE_ID,
         span,
         vis: ast::Visibility { span, kind: ast::VisibilityKind::Inherited, tokens: None },
-        ident: Ident::dummy(),
+        ident: Ident::empty(),
         kind: ast::ItemKind::ForeignMod(ast::ForeignMod {
             extern_span: span,
             safety: ast::Safety::Unsafe(span),
