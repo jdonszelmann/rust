@@ -294,7 +294,6 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
         ribs: &[Rib<'ra>],
         ignore_binding: Option<NameBinding<'ra>>,
     ) -> Option<LexicalScopeBinding<'ra>> {
-        assert!(ns == TypeNS || ns == ValueNS);
         let orig_ident = ident;
         if ident.name == kw::Empty {
             return Some(LexicalScopeBinding::Res(Res::Err));

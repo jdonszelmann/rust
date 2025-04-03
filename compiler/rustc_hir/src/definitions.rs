@@ -291,6 +291,8 @@ pub enum DefPathData {
     /// An existential `impl Trait` type node.
     /// Argument position `impl Trait` have a `TypeNs` with their pretty-printed name.
     OpaqueTy,
+
+    EiiShim,
 }
 
 impl Definitions {
@@ -416,7 +418,7 @@ impl DefPathData {
             ValueNs(name) | MacroNs(name) | LifetimeNs(name) => Some(name),
 
             Impl | ForeignMod | CrateRoot | Use | GlobalAsm | Closure | Ctor | AnonConst
-            | OpaqueTy => None,
+            | OpaqueTy | EiiShim => None,
         }
     }
 
@@ -441,6 +443,7 @@ impl DefPathData {
             Ctor => DefPathDataName::Anon { namespace: sym::constructor },
             AnonConst => DefPathDataName::Anon { namespace: sym::constant },
             OpaqueTy => DefPathDataName::Anon { namespace: sym::opaque },
+            EiiShim => DefPathDataName::Anon { namespace: sym::eii },
         }
     }
 }

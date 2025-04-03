@@ -750,7 +750,10 @@ fn walk_mac<T: MutVisitor>(vis: &mut T, mac: &mut MacCall) {
 }
 
 fn walk_macro_def<T: MutVisitor>(vis: &mut T, macro_def: &mut MacroDef) {
-    let MacroDef { body, macro_rules: _ } = macro_def;
+    let MacroDef { body, macro_rules: _, eii_macro_for } = macro_def;
+    if let Some(EIIMacroFor { extern_item_path, impl_unsafe: _, span: _ }) = eii_macro_for {
+        vis.visit_path(extern_item_path);
+    }
     visit_delim_args(vis, body);
 }
 
@@ -972,10 +975,16 @@ fn walk_fn<T: MutVisitor>(vis: &mut T, kind: FnKind<'_>) {
                 body,
                 sig: FnSig { header, decl, span },
                 define_opaque,
+                eii_impl,
             },
         ) => {
             // Identifier and visibility are visited as a part of the item.
             visit_defaultness(vis, defaultness);
+
+            for EIIImpl { node_id, eii_macro_path, .. } in eii_impl {
+                vis.visit_id(node_id);
+                vis.visit_path(eii_macro_path);
+            }
             vis.visit_fn_header(header);
             vis.visit_generics(generics);
             vis.visit_fn_decl(decl);

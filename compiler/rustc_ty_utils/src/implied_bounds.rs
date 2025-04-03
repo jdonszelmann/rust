@@ -146,7 +146,8 @@ fn assumed_wf_types<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx [(Ty<'
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::Closure
-        | DefKind::SyntheticCoroutineBody => ty::List::empty(),
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::EiiShim { .. } => ty::List::empty(),
     }
 }
 

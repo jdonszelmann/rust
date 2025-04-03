@@ -141,7 +141,8 @@ pub(crate) fn new_item_kind(kind: DefKind) -> ItemKind {
         | DefKind::Field
         | DefKind::LifetimeParam
         | DefKind::Impl { .. }
-        | DefKind::GlobalAsm => {
+        | DefKind::GlobalAsm
+        | DefKind::EiiShim { .. } => {
             unreachable!("Not a valid item kind: {kind:?}");
         }
         DefKind::Closure | DefKind::AssocFn | DefKind::Fn | DefKind::SyntheticCoroutineBody => {

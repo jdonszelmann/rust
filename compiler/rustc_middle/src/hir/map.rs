@@ -298,7 +298,9 @@ impl<'tcx> TyCtxt<'tcx> {
                 BodyOwnerKind::Const { inline: false }
             }
             DefKind::InlineConst => BodyOwnerKind::Const { inline: true },
-            DefKind::Ctor(..) | DefKind::Fn | DefKind::AssocFn => BodyOwnerKind::Fn,
+            DefKind::Ctor(..) | DefKind::Fn | DefKind::AssocFn | DefKind::EiiShim => {
+                BodyOwnerKind::Fn
+            }
             DefKind::Closure | DefKind::SyntheticCoroutineBody => BodyOwnerKind::Closure,
             DefKind::Static { safety: _, mutability, nested: false } => {
                 BodyOwnerKind::Static(mutability)

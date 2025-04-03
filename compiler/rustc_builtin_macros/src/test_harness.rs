@@ -347,6 +347,7 @@ fn mk_main(cx: &mut TestCtxt<'_>) -> P<ast::Item> {
         contract: None,
         body: Some(main_body),
         define_opaque: None,
+        eii_impl: ThinVec::new(),
     }));
 
     // Honor the reexport_test_harness_main attribute
