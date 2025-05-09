@@ -1,5 +1,5 @@
-hir_analysis_ambiguous_assoc_item = ambiguous associated {$assoc_kind} `{$assoc_name}` in bounds of `{$qself}`
-    .label = ambiguous associated {$assoc_kind} `{$assoc_name}`
+hir_analysis_ambiguous_assoc_item = ambiguous associated {$assoc_kind} `{$assoc_ident}` in bounds of `{$qself}`
+    .label = ambiguous associated {$assoc_kind} `{$assoc_ident}`
 
 hir_analysis_ambiguous_lifetime_bound =
     ambiguous lifetime bound, explicit lifetime bound required
@@ -12,13 +12,13 @@ hir_analysis_assoc_item_is_private = {$kind} `{$name}` is private
     .label = private {$kind}
     .defined_here_label = the {$kind} is defined here
 
-hir_analysis_assoc_item_not_found = associated {$assoc_kind} `{$assoc_name}` not found for `{$qself}`
+hir_analysis_assoc_item_not_found = associated {$assoc_kind} `{$assoc_ident}` not found for `{$qself}`
 
 hir_analysis_assoc_item_not_found_found_in_other_trait_label = there is {$identically_named ->
         [true] an
         *[false] a similarly named
     } associated {$assoc_kind} `{$suggested_name}` in the trait `{$trait_name}`
-hir_analysis_assoc_item_not_found_label = associated {$assoc_kind} `{$assoc_name}` not found
+hir_analysis_assoc_item_not_found_label = associated {$assoc_kind} `{$assoc_ident}` not found
 hir_analysis_assoc_item_not_found_other_sugg = `{$qself}` has the following associated {$assoc_kind}
 hir_analysis_assoc_item_not_found_similar_in_other_trait_qpath_sugg =
     consider fully qualifying{$identically_named ->
@@ -159,6 +159,10 @@ hir_analysis_drop_impl_reservation = reservation `Drop` impls are not supported
 hir_analysis_duplicate_precise_capture = cannot capture parameter `{$name}` twice
     .label = parameter captured again here
 
+hir_analysis_eii_with_generics =
+    #[{$eii_name}] cannot have generic parameters other than lifetimes
+    .label = required by this attribute
+
 hir_analysis_empty_specialization = specialization impl does not specialize any associated items
     .note = impl is a specialization of this impl
 
@@ -293,6 +297,13 @@ hir_analysis_lifetime_must_be_first = lifetime parameter `{$name}` must be liste
 hir_analysis_lifetime_not_captured = `impl Trait` captures lifetime parameter, but it is not mentioned in `use<...>` precise captures list
     .label = lifetime captured due to being mentioned in the bounds of the `impl Trait`
     .param_label = this lifetime parameter is captured
+
+hir_analysis_lifetimes_or_bounds_mismatch_on_eii =
+    lifetime parameters or bounds of `{$ident}` do not match the declaration
+    .label = lifetimes do not match
+    .generics_label = lifetimes in impl do not match this signature
+    .where_label = this `where` clause might not match the one in the declaration
+    .bounds_label = this bound might be missing in the implementation
 
 hir_analysis_lifetimes_or_bounds_mismatch_on_trait =
     lifetime parameters or bounds on {$item_kind} `{$ident}` do not match the trait declaration
@@ -450,9 +461,6 @@ hir_analysis_recursive_generic_parameter = {$param_def_kind} `{$param_name}` is 
 hir_analysis_redundant_lifetime_args = unnecessary lifetime parameter `{$victim}`
     .note = you can use the `{$candidate}` lifetime directly, in place of `{$victim}`
 
-hir_analysis_register_type_unstable =
-    type `{$ty}` cannot be used with this register class in stable
-
 hir_analysis_requires_note = the `{$trait_name}` impl for `{$ty}` requires that `{$error_predicate}`
 
 hir_analysis_return_type_notation_equality_bound =
@@ -485,6 +493,9 @@ hir_analysis_rpitit_refined_lifetimes = impl trait in impl method captures fewer
 hir_analysis_self_in_impl_self =
     `Self` is not valid in the self type of an impl block
     .note = replace `Self` with a different type
+
+hir_analysis_self_in_type_alias = `Self` is not allowed in type aliases
+    .label = `Self` is only available in impls, traits, and concrete type definitions
 
 hir_analysis_self_ty_not_captured = `impl Trait` must mention the `Self` type of the trait in `use<...>`
     .label = `Self` type parameter is implicitly captured by this `impl Trait`

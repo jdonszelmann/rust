@@ -89,22 +89,24 @@
 
 // tidy-alphabetical-start
 #![allow(internal_features)]
-#![cfg_attr(doc, recursion_limit = "256")] // FIXME(nnethercote): will be removed by #124141
+#![cfg_attr(bootstrap, feature(let_chains))]
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/nightly-rustc/")]
 #![doc(rust_logo)]
-#![feature(let_chains)]
+#![feature(assert_matches)]
 #![feature(rustdoc_internals)]
 // tidy-alphabetical-end
 
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{CrateNum, LOCAL_CRATE};
 use rustc_middle::middle::codegen_fn_attrs::{CodegenFnAttrFlags, CodegenFnAttrs};
+use rustc_middle::middle::eii::EiiMapping;
 use rustc_middle::mir::mono::{InstantiationMode, MonoItem};
 use rustc_middle::query::Providers;
 use rustc_middle::ty::{self, Instance, TyCtxt};
 use rustc_session::config::SymbolManglingVersion;
 use tracing::debug;
 
+mod export;
 mod hashed;
 mod legacy;
 mod v0;
@@ -239,6 +241,7 @@ fn compute_symbol_name<'tcx>(
     if tcx.is_foreign_item(def_id)
         && (!tcx.sess.target.is_like_wasm
             || !tcx.wasm_import_module_map(def_id.krate).contains_key(&def_id))
+        && !attrs.flags.contains(CodegenFnAttrFlags::EII_MANGLE_EXTERN)
     {
         if let Some(name) = attrs.link_name {
             return name.to_string();
@@ -255,6 +258,19 @@ fn compute_symbol_name<'tcx>(
         // Don't mangle
         return tcx.item_name(def_id).to_string();
     }
+
+    // if this is an EII shim, it has a kind of fake defid. It has one because it has to have one,
+    // but when we generate a symbol for it the name must actually match the name of the extern
+    // generated as part of the declaration of the EII. So, we use an instance of `extern_item` as
+    // the instance used for ocmputing the symbol name.
+    let eii_map = tcx.get_externally_implementable_item_impls(());
+    let instance = if let Some(EiiMapping { extern_item, .. }) =
+        instance.def_id().as_local().and_then(|x| eii_map.get(&x)).copied()
+    {
+        Instance::mono(tcx, extern_item)
+    } else {
+        instance
+    };
 
     // If we're dealing with an instance of a function that's inlined from
     // another crate but we're marking it as globally shared to our
@@ -297,12 +313,21 @@ fn compute_symbol_name<'tcx>(
         tcx.symbol_mangling_version(mangling_version_crate)
     };
 
-    let symbol = match mangling_version {
-        SymbolManglingVersion::Legacy => legacy::mangle(tcx, instance, instantiating_crate),
-        SymbolManglingVersion::V0 => v0::mangle(tcx, instance, instantiating_crate),
-        SymbolManglingVersion::Hashed => hashed::mangle(tcx, instance, instantiating_crate, || {
-            v0::mangle(tcx, instance, instantiating_crate)
-        }),
+    let symbol = match tcx.is_exportable(def_id) {
+        true => format!(
+            "{}.{}",
+            v0::mangle(tcx, instance, instantiating_crate, true),
+            export::compute_hash_of_export_fn(tcx, instance)
+        ),
+        false => match mangling_version {
+            SymbolManglingVersion::Legacy => legacy::mangle(tcx, instance, instantiating_crate),
+            SymbolManglingVersion::V0 => v0::mangle(tcx, instance, instantiating_crate, false),
+            SymbolManglingVersion::Hashed => {
+                hashed::mangle(tcx, instance, instantiating_crate, || {
+                    v0::mangle(tcx, instance, instantiating_crate, false)
+                })
+            }
+        },
     };
 
     debug_assert!(

@@ -78,8 +78,8 @@ impl<'a> PathParser<'a> {
         (self.len() == 1).then(|| **self.segments().next().as_ref().unwrap())
     }
 
-    pub fn word_or_empty(&self) -> Ident {
-        self.word().unwrap_or_else(Ident::empty)
+    pub fn word_sym(&self) -> Option<Symbol> {
+        self.word().map(|ident| ident.name)
     }
 
     /// Asserts that this MetaItem is some specific word.
@@ -284,11 +284,6 @@ impl<'a> MetaItemParser<'a> {
         Some(self.word()?.0)
     }
 
-    /// Like [`word`](Self::word), but returns an empty symbol instead of None
-    pub fn word_or_empty_without_args(&self) -> Ident {
-        self.word_or_empty().0
-    }
-
     /// Asserts that this MetaItem starts with a word, or single segment path.
     ///
     /// Some examples:
@@ -298,12 +293,6 @@ impl<'a> MetaItemParser<'a> {
     pub fn word(&self) -> Option<(Ident, &ArgParser<'a>)> {
         let (path, args) = self.deconstruct();
         Some((path.word()?, args))
-    }
-
-    /// Like [`word`](Self::word), but returns an empty symbol instead of None
-    pub fn word_or_empty(&self) -> (Ident, &ArgParser<'a>) {
-        let (path, args) = self.deconstruct();
-        (path.word().unwrap_or(Ident::empty()), args)
     }
 
     /// Asserts that this MetaItem starts with some specific word.
@@ -430,9 +419,7 @@ impl<'a> MetaItemListParserContext<'a> {
                 let span = span.with_hi(segments.last().unwrap().span.hi());
                 Some(AttrPath { segments: segments.into_boxed_slice(), span })
             }
-            TokenTree::Token(Token { kind: token::OpenDelim(_) | token::CloseDelim(_), .. }, _) => {
-                None
-            }
+            TokenTree::Token(Token { kind, .. }, _) if kind.is_delim() => None,
             _ => {
                 // malformed attributes can get here. We can't crash, but somewhere else should've
                 // already warned for this.
@@ -485,25 +472,7 @@ impl<'a> MetaItemListParserContext<'a> {
         }
 
         // or a path.
-        let path =
-            if let Some(TokenTree::Token(Token { kind: token::Interpolated(_), span, .. }, _)) =
-                self.inside_delimiters.peek()
-            {
-                self.inside_delimiters.next();
-                // We go into this path if an expr ended up in an attribute that
-                // expansion did not turn into a literal. Say, `#[repr(align(macro!()))]`
-                // where the macro didn't expand to a literal. An error is already given
-                // for this at this point, and then we do continue. This makes this path
-                // reachable...
-                let e = self.dcx.span_delayed_bug(
-                    *span,
-                    "expr in place where literal is expected (builtin attr parsing)",
-                );
-
-                return Some(MetaItemOrLitParser::Err(*span, e));
-            } else {
-                self.next_path()?
-            };
+        let path = self.next_path()?;
 
         // Paths can be followed by:
         // - `(more meta items)` (another list)

@@ -309,6 +309,13 @@ pub enum ObligationCauseCode<'tcx> {
         kind: ty::AssocKind,
     },
 
+    /// Error derived when checking an impl item is compatible with
+    /// its corresponding trait item's definition
+    CompareEII {
+        external_impl: LocalDefId,
+        declaration: DefId,
+    },
+
     /// Checking that the bounds of a trait's associated type hold for a given impl
     CheckAssociatedTypeBounds {
         impl_item_def_id: LocalDefId,
@@ -404,7 +411,7 @@ pub enum ObligationCauseCode<'tcx> {
     /// Requirement for a `const N: Ty` to implement `Ty: ConstParamTy`
     ConstParam(Ty<'tcx>),
 
-    /// Obligations emitted during the normalization of a weak type alias.
+    /// Obligations emitted during the normalization of a free type alias.
     TypeAlias(ObligationCauseCodeHandle<'tcx>, Span, DefId),
 }
 

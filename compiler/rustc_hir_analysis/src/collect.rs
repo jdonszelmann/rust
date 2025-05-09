@@ -14,6 +14,7 @@
 //! At present, however, we do run collection across all items in the
 //! crate as a kind of pass. This should eventually be factored away.
 
+use std::assert_matches::assert_matches;
 use std::cell::Cell;
 use std::iter;
 use std::ops::Bound;
@@ -32,6 +33,7 @@ use rustc_hir::{self as hir, GenericParamKind, HirId, Node, PreciseCapturingArgK
 use rustc_infer::infer::{InferCtxt, TyCtxtInferExt};
 use rustc_infer::traits::ObligationCause;
 use rustc_middle::hir::nested_filter;
+use rustc_middle::middle::eii::EiiMapping;
 use rustc_middle::query::Providers;
 use rustc_middle::ty::util::{Discr, IntTypeExt};
 use rustc_middle::ty::{self, AdtKind, Const, IsSuggestable, Ty, TyCtxt, TypingMode, fold_regions};
@@ -42,9 +44,8 @@ use rustc_trait_selection::infer::InferCtxtExt;
 use rustc_trait_selection::traits::ObligationCtxt;
 use tracing::{debug, instrument};
 
-use crate::check::intrinsic::intrinsic_operation_unsafety;
 use crate::errors;
-use crate::hir_ty_lowering::errors::assoc_kind_str;
+use crate::hir_ty_lowering::errors::assoc_tag_str;
 use crate::hir_ty_lowering::{FeedConstTy, HirTyLowerer, RegionInferReason};
 
 pub(crate) mod dump;
@@ -61,6 +62,7 @@ pub(crate) fn provide(providers: &mut Providers) {
     *providers = Providers {
         type_of: type_of::type_of,
         type_of_opaque: type_of::type_of_opaque,
+        type_of_opaque_hir_typeck: type_of::type_of_opaque_hir_typeck,
         type_alias_is_lazy: type_of::type_alias_is_lazy,
         item_bounds: item_bounds::item_bounds,
         explicit_item_bounds: item_bounds::explicit_item_bounds,
@@ -438,9 +440,9 @@ impl<'tcx> HirTyLowerer<'tcx> for ItemCtxt<'tcx> {
         &self,
         span: Span,
         def_id: LocalDefId,
-        assoc_name: Ident,
+        assoc_ident: Ident,
     ) -> ty::EarlyBinder<'tcx, &'tcx [(ty::Clause<'tcx>, Span)]> {
-        self.tcx.at(span).type_param_predicates((self.item_def_id, def_id, assoc_name))
+        self.tcx.at(span).type_param_predicates((self.item_def_id, def_id, assoc_ident))
     }
 
     fn lower_assoc_shared(
@@ -449,7 +451,7 @@ impl<'tcx> HirTyLowerer<'tcx> for ItemCtxt<'tcx> {
         item_def_id: DefId,
         item_segment: &rustc_hir::PathSegment<'tcx>,
         poly_trait_ref: ty::PolyTraitRef<'tcx>,
-        kind: ty::AssocKind,
+        assoc_tag: ty::AssocTag,
     ) -> Result<(DefId, ty::GenericArgsRef<'tcx>), ErrorGuaranteed> {
         if let Some(trait_ref) = poly_trait_ref.no_bound_vars() {
             let item_args = self.lowerer().lower_generic_args_of_assoc_item(
@@ -524,7 +526,7 @@ impl<'tcx> HirTyLowerer<'tcx> for ItemCtxt<'tcx> {
                 inferred_sugg,
                 bound,
                 mpart_sugg,
-                what: assoc_kind_str(kind),
+                what: assoc_tag_str(assoc_tag),
             }))
         }
     }
@@ -675,7 +677,7 @@ fn lower_item(tcx: TyCtxt<'_>, item_id: hir::ItemId) {
         // These don't define types.
         hir::ItemKind::ExternCrate(..)
         | hir::ItemKind::Use(..)
-        | hir::ItemKind::Macro(..)
+        | hir::ItemKind::Macro { .. }
         | hir::ItemKind::Mod(..)
         | hir::ItemKind::GlobalAsm { .. } => {}
         hir::ItemKind::ForeignMod { items, .. } => {
@@ -1344,7 +1346,8 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ty::EarlyBinder<'_, ty::PolyFn
             compute_sig_of_foreign_fn_decl(tcx, def_id, sig.decl, abi, sig.header.safety())
         }
 
-        Ctor(data) | Variant(hir::Variant { data, .. }) if data.ctor().is_some() => {
+        Ctor(data) => {
+            assert_matches!(data.ctor(), Some(_));
             let adt_def_id = tcx.hir_get_parent_item(hir_id).def_id.to_def_id();
             let ty = tcx.type_of(adt_def_id).instantiate_identity();
             let inputs = data.fields().iter().map(|f| tcx.type_of(f.def_id).instantiate_identity());
@@ -1368,6 +1371,16 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ty::EarlyBinder<'_, ty::PolyFn
             //
             //    args.as_closure().sig(def_id, tcx)
             bug!("to get the signature of a closure, use `args.as_closure().sig()` not `fn_sig()`",);
+        }
+
+        x @ Synthetic => {
+            if let Some(EiiMapping { extern_item, .. }) =
+                tcx.get_externally_implementable_item_impls(()).get(&def_id)
+            {
+                return tcx.fn_sig(extern_item);
+            } else {
+                bug!("unexpected sort of node in fn_sig(): {:?}", x);
+            }
         }
 
         x => {
@@ -1416,7 +1429,7 @@ fn recover_infer_ret_ty<'tcx>(
         GenericParamKind::Lifetime { .. } => true,
         _ => false,
     });
-    let fn_sig = fold_regions(tcx, fn_sig, |r, _| match *r {
+    let fn_sig = fold_regions(tcx, fn_sig, |r, _| match r.kind() {
         ty::ReErased => {
             if has_region_params {
                 ty::Region::new_error_with_message(
@@ -1703,18 +1716,13 @@ fn compute_sig_of_foreign_fn_decl<'tcx>(
     abi: ExternAbi,
     safety: hir::Safety,
 ) -> ty::PolyFnSig<'tcx> {
-    let safety = if abi == ExternAbi::RustIntrinsic {
-        intrinsic_operation_unsafety(tcx, def_id)
-    } else {
-        safety
-    };
     let hir_id = tcx.local_def_id_to_hir_id(def_id);
     let fty =
         ItemCtxt::new(tcx, def_id).lowerer().lower_fn_ty(hir_id, safety, abi, decl, None, None);
 
     // Feature gate SIMD types in FFI, since I am not sure that the
     // ABIs are handled at all correctly. -huonw
-    if abi != ExternAbi::RustIntrinsic && !tcx.features().simd_ffi() {
+    if !tcx.features().simd_ffi() {
         let check = |hir_ty: &hir::Ty<'_>, ty: Ty<'_>| {
             if ty.is_simd() {
                 let snip = tcx

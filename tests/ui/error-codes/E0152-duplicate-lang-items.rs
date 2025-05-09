@@ -3,17 +3,18 @@
 //!
 //! Issue: <https://github.com/rust-lang/rust/issues/31788>
 
-//@ error-pattern: first defined in crate `std`
-//@ normalize-stderr: "loaded from .*libstd-.*.rlib" -> "loaded from SYSROOT/libstd-*.rlib"
+//@ normalize-stderr: "loaded from .*libcore-.*.rlib" -> "loaded from SYSROOT/libcore-*.rlib"
+//@ dont-require-annotations: NOTE
 #![feature(lang_items)]
 
 extern crate core;
 
 use core::panic::PanicInfo;
 
-#[lang = "panic_impl"]
+#[lang = "panic_cannot_unwind"]
 fn panic_impl(info: &PanicInfo) -> ! {
-    //~^ ERROR: found duplicate lang item `panic_impl`
+    //~^ ERROR: found duplicate lang item `panic_cannot_unwind` [E0152]
+    //~| NOTE first defined in crate `core`
     loop {}
 }
 

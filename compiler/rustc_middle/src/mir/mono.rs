@@ -150,6 +150,7 @@ impl<'tcx> MonoItem<'tcx> {
 
         // If the function is #[naked] or contains any other attribute that requires exactly-once
         // instantiation:
+        // We emit an unused_attributes lint for this case, which should be kept in sync if possible.
         let codegen_fn_attrs = tcx.codegen_fn_attrs(instance.def_id());
         if codegen_fn_attrs.contains_extern_indicator()
             || codegen_fn_attrs.flags.contains(CodegenFnAttrFlags::NAKED)
@@ -178,6 +179,15 @@ impl<'tcx> MonoItem<'tcx> {
                 return InstantiationMode::LocalCopy;
             }
             return opt_incr_drop_glue_mode(tcx, ty);
+        }
+
+        // Eii shims are only generated in the final crate because we need to resolve defaults.
+        // Specifically, only when making the final crate we know whether there was an explicit
+        // implementation given *somewhere* and if not we then have to decide whether there is
+        // a default which we need to insert. That default needs to be shared between all
+        // dependencies; hence globally shared.
+        if let InstanceKind::EiiShim { .. } = instance.def {
+            return InstantiationMode::GloballyShared { may_conflict: false };
         }
 
         // We need to ensure that we do not decide the InstantiationMode of an exported symbol is
@@ -317,7 +327,7 @@ impl<'tcx> fmt::Display for MonoItem<'tcx> {
         match *self {
             MonoItem::Fn(instance) => write!(f, "fn {instance}"),
             MonoItem::Static(def_id) => {
-                write!(f, "static {}", Instance::new(def_id, GenericArgs::empty()))
+                write!(f, "static {}", Instance::new_raw(def_id, GenericArgs::empty()))
             }
             MonoItem::GlobalAsm(..) => write!(f, "global_asm"),
         }
@@ -373,7 +383,7 @@ pub struct MonoItemData {
 /// Specifies the linkage type for a `MonoItem`.
 ///
 /// See <https://llvm.org/docs/LangRef.html#linkage-types> for more details about these variants.
-#[derive(Copy, Clone, PartialEq, Debug, TyEncodable, TyDecodable, HashStable)]
+#[derive(Copy, Clone, PartialEq, Debug, TyEncodable, TyDecodable, HashStable, Eq, Hash)]
 pub enum Linkage {
     External,
     AvailableExternally,
@@ -529,7 +539,10 @@ impl<'tcx> CodegenUnit<'tcx> {
                             | InstanceKind::CloneShim(..)
                             | InstanceKind::ThreadLocalShim(..)
                             | InstanceKind::FnPtrAddrShim(..)
-                            | InstanceKind::AsyncDropGlueCtorShim(..) => None,
+                            | InstanceKind::AsyncDropGlue(..)
+                            | InstanceKind::FutureDropPollShim(..)
+                            | InstanceKind::AsyncDropGlueCtorShim(..)
+                            | InstanceKind::EiiShim { .. } => None,
                         }
                     }
                     MonoItem::Static(def_id) => def_id.as_local().map(Idx::index),

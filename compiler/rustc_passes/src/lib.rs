@@ -6,10 +6,10 @@
 
 // tidy-alphabetical-start
 #![allow(internal_features)]
-#![cfg_attr(doc, recursion_limit = "256")] // FIXME(nnethercote): will be removed by #124141
+#![cfg_attr(bootstrap, feature(let_chains))]
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/nightly-rustc/")]
 #![doc(rust_logo)]
-#![feature(let_chains)]
+#![feature(box_patterns)]
 #![feature(map_try_insert)]
 #![feature(rustdoc_internals)]
 #![feature(try_blocks)]
@@ -19,9 +19,11 @@ use rustc_middle::query::Providers;
 
 pub mod abi_test;
 mod check_attr;
+mod check_export;
 pub mod dead;
 mod debugger_visualizer;
 mod diagnostic_items;
+mod eii;
 pub mod entry;
 mod errors;
 #[cfg(debug_assertions)]
@@ -54,4 +56,7 @@ pub fn provide(providers: &mut Providers) {
     reachable::provide(providers);
     stability::provide(providers);
     upvars::provide(providers);
+    check_export::provide(providers);
+    providers.get_externally_implementable_item_impls =
+        eii::get_externally_implementable_item_impls;
 }

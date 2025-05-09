@@ -294,11 +294,7 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
         ribs: &[Rib<'ra>],
         ignore_binding: Option<NameBinding<'ra>>,
     ) -> Option<LexicalScopeBinding<'ra>> {
-        assert!(ns == TypeNS || ns == ValueNS);
         let orig_ident = ident;
-        if ident.name == kw::Empty {
-            return Some(LexicalScopeBinding::Res(Res::Err));
-        }
         let (general_span, normalized_span) = if ident.name == kw::SelfUpper {
             // FIXME(jseyfried) improve `Self` hygiene
             let empty_span = ident.span.with_ctxt(SyntaxContext::root());

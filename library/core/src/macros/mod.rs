@@ -237,9 +237,10 @@ pub macro assert_matches {
 /// ```
 #[unstable(feature = "cfg_match", issue = "115585")]
 #[rustc_diagnostic_item = "cfg_match"]
+#[rustc_macro_transparency = "semitransparent"]
 pub macro cfg_match {
     ({ $($tt:tt)* }) => {{
-        cfg_match! { $($tt)* }
+        $crate::cfg_match! { $($tt)* }
     }},
     (_ => { $($output:tt)* }) => {
         $($output)*
@@ -249,10 +250,10 @@ pub macro cfg_match {
         $($( $rest:tt )+)?
     ) => {
         #[cfg($cfg)]
-        cfg_match! { _ => $output }
+        $crate::cfg_match! { _ => $output }
         $(
             #[cfg(not($cfg))]
-            cfg_match! { $($rest)+ }
+            $crate::cfg_match! { $($rest)+ }
         )?
     },
 }
@@ -1137,6 +1138,10 @@ pub(crate) mod builtin {
         issue = "29599",
         reason = "`concat_idents` is not stable enough for use and is subject to change"
     )]
+    #[deprecated(
+        since = "1.88.0",
+        note = "use `${concat(...)}` with the `macro_metavar_expr_concat` feature instead"
+    )]
     #[rustc_builtin_macro]
     #[macro_export]
     macro_rules! concat_idents {
@@ -1656,7 +1661,6 @@ pub(crate) mod builtin {
     #[unstable(
         feature = "test",
         issue = "50297",
-        soft,
         reason = "`bench` is a part of custom test frameworks which are unstable"
     )]
     #[allow_internal_unstable(test, rustc_attrs, coverage_attribute)]
@@ -1743,8 +1747,8 @@ pub(crate) mod builtin {
         /* compiler built-in */
     }
 
-    /// Provide a list of type aliases and other opaque-type-containing type definitions.
-    /// This list will be used in the body of the item it is applied to define opaque
+    /// Provide a list of type aliases and other opaque-type-containing type definitions
+    /// to an item with a body. This list will be used in that body to define opaque
     /// types' hidden types.
     /// Can only be applied to things that have bodies.
     #[unstable(
@@ -1753,7 +1757,6 @@ pub(crate) mod builtin {
         reason = "`type_alias_impl_trait` has open design concerns"
     )]
     #[rustc_builtin_macro]
-    #[cfg(not(bootstrap))]
     pub macro define_opaque($($tt:tt)*) {
         /* compiler built-in */
     }
@@ -1779,5 +1782,33 @@ pub(crate) mod builtin {
     )]
     pub macro deref($pat:pat) {
         builtin # deref($pat)
+    }
+
+    /// Externally Implementable Item: Defines an attribute macro that can override the item
+    /// this is applied to.
+    #[cfg(not(bootstrap))]
+    #[unstable(feature = "eii", issue = "125418")]
+    #[rustc_builtin_macro]
+    #[allow_internal_unstable(eii_internals, decl_macro, rustc_attrs)]
+    pub macro eii($item:item) {
+        /* compiler built-in */
+    }
+
+    /// Unsafely Externally Implementable Item: Defines an unsafe attribute macro that can override
+    /// the item this is applied to.
+    #[cfg(not(bootstrap))]
+    #[unstable(feature = "eii", issue = "125418")]
+    #[rustc_builtin_macro]
+    #[allow_internal_unstable(eii_internals, decl_macro, rustc_attrs)]
+    pub macro unsafe_eii($item:item) {
+        /* compiler built-in */
+    }
+
+    /// Impl detail of EII
+    #[cfg(not(bootstrap))]
+    #[unstable(feature = "eii_internals", issue = "none")]
+    #[rustc_builtin_macro]
+    pub macro eii_macro_for($item:item) {
+        /* compiler built-in */
     }
 }

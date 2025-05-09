@@ -278,6 +278,17 @@ passes_duplicate_diagnostic_item_in_crate =
     duplicate diagnostic item in crate `{$crate_name}`: `{$name}`
     .note = the diagnostic item is first defined in crate `{$orig_crate_name}`
 
+passes_duplicate_eii_impls =
+    multiple implementations of `#[{$name}]`
+    .first = first implemented here in crate `{$first_crate}`
+    .second = also implemented here in crate `{$second_crate}`
+    .note = in addition to these two, { $num_additional_crates ->
+         [one] another implementation was found in crate {$additional_crate_names}
+         *[other] more implementations were also found in the following crates: {$additional_crate_names}
+    }
+
+    .help = an "externally implementable item" can only have a single implementation in the final artifact. When multiple implementations are found, also in different crates, they conflict
+
 passes_duplicate_feature_err =
     the feature `{$feature}` has already been enabled
 
@@ -311,6 +322,25 @@ passes_duplicate_lang_item_crate_depends =
     .first_definition_path = first definition in `{$orig_crate_name}` loaded from {$orig_path}
     .second_definition_path = second definition in `{$crate_name}` loaded from {$path}
 
+passes_eii_fn_with_target_feature =
+    `#[{$name}]` is not allowed to have `#[target_feature]`
+    .label = `#[{$name}]` is not allowed to have `#[target_feature]`
+
+passes_eii_fn_with_track_caller =
+    `#[{$name}]` is not allowed to have `#[track_caller]`
+    .label = `#[{$name}]` is not allowed to have `#[track_caller]`
+
+passes_eii_impl_not_function =
+    `eii_macro_for` is only valid on functions
+
+passes_eii_impl_requires_unsafe =
+    `#[{$name}]` is unsafe to implement
+passes_eii_impl_requires_unsafe_suggestion = wrap the attribute in `unsafe(...)`
+
+passes_eii_without_impl =
+    `#[{$name}]` required, but not found
+    .label = expected because `#[{$name}]` was declared here in crate `{$decl_crate_name}`
+    .help = expected at least one implementation in crate `{$current_crate_name}` or any of its dependencies
 passes_export_name =
     attribute should be applied to a free function, impl method or static
     .label = not a free function, impl method or static
@@ -356,6 +386,8 @@ passes_ignored_derived_impls =
 passes_implied_feature_not_exist =
     feature `{$implied_by}` implying `{$feature}` does not exist
 
+passes_incorrect_crate_type = lang items are not allowed in stable dylibs
+
 passes_incorrect_do_not_recommend_args =
     `#[diagnostic::do_not_recommend]` does not expect any arguments
 
@@ -383,6 +415,10 @@ passes_inline_ignored_constants =
     .warn = {-passes_previously_accepted}
     .note = {-passes_see_issue(issue: "65833")}
 
+passes_inline_ignored_for_exported =
+    `#[inline]` is ignored on externally exported functions
+    .help = externally exported functions are functions with `#[no_mangle]`, `#[export_name]`, or `#[linkage]`
+
 passes_inline_ignored_function_prototype =
     `#[inline]` is ignored on function prototypes
 
@@ -400,22 +436,9 @@ passes_invalid_attr_at_crate_level =
 passes_invalid_attr_at_crate_level_item =
     the inner attribute doesn't annotate this {$kind}
 
-passes_invalid_macro_export_arguments = `{$name}` isn't a valid `#[macro_export]` argument
+passes_invalid_macro_export_arguments = invalid `#[macro_export]` argument
 
 passes_invalid_macro_export_arguments_too_many_items = `#[macro_export]` can only take 1 or 0 arguments
-
-passes_lang_item_fn = {$name ->
-    [panic_impl] `#[panic_handler]`
-    *[other] `{$name}` lang item
-} function
-
-passes_lang_item_fn_with_target_feature =
-    {passes_lang_item_fn} is not allowed to have `#[target_feature]`
-    .label = {passes_lang_item_fn} is not allowed to have `#[target_feature]`
-
-passes_lang_item_fn_with_track_caller =
-    {passes_lang_item_fn} is not allowed to have `#[track_caller]`
-    .label = {passes_lang_item_fn} is not allowed to have `#[track_caller]`
 
 passes_lang_item_on_incorrect_target =
     `{$name}` lang item must be applied to a {$expected_target}
@@ -485,9 +508,6 @@ passes_missing_lang_item =
     .note = this can occur when a binary crate with `#![no_std]` is compiled for a target where `{$name}` is defined in the standard library
     .help = you may be able to compile for a target that doesn't need `{$name}`, specify a target with `--target` or in `.cargo/config`
 
-passes_missing_panic_handler =
-    `#[panic_handler]` function required, but not found
-
 passes_missing_stability_attr =
     {$descr} has missing stability attribute
 
@@ -504,7 +524,7 @@ passes_must_use_no_effect =
     `#[must_use]` has no effect when applied to {$article} {$target}
 
 passes_naked_asm_outside_naked_fn =
-    the `naked_asm!` macro can only be used in functions marked with `#[naked]`
+    the `naked_asm!` macro can only be used in functions marked with `#[unsafe(naked)]`
 
 passes_naked_functions_asm_block =
     naked functions must contain a single `naked_asm!` invocation
@@ -512,9 +532,9 @@ passes_naked_functions_asm_block =
     .label_non_asm = not allowed in naked functions
 
 passes_naked_functions_incompatible_attribute =
-    attribute incompatible with `#[naked]`
-    .label = the `{$attr}` attribute is incompatible with `#[naked]`
-    .naked_attribute = function marked with `#[naked]` here
+    attribute incompatible with `#[unsafe(naked)]`
+    .label = the `{$attr}` attribute is incompatible with `#[unsafe(naked)]`
+    .naked_attribute = function marked with `#[unsafe(naked)]` here
 
 passes_naked_functions_must_naked_asm =
     the `asm!` macro is not allowed in naked functions
@@ -738,11 +758,22 @@ passes_trait_impl_const_stable =
 passes_transparent_incompatible =
     transparent {$target} cannot have other repr hints
 
-passes_undefined_naked_function_abi =
-    Rust ABI is unsupported in naked functions
+passes_unexportable_adt_with_private_fields = ADT types with private fields are not exportable
+    .note = `{$field_name}` is private
 
-passes_unknown_external_lang_item =
-    unknown external lang item: `{$lang_item}`
+passes_unexportable_fn_abi = only functions with "C" ABI are exportable
+
+passes_unexportable_generic_fn = generic functions are not exportable
+
+passes_unexportable_item = {$descr}'s are not exportable
+
+passes_unexportable_priv_item = private items are not exportable
+    .note = is only usable at visibility `{$vis_descr}`
+
+passes_unexportable_type_in_interface = {$desc} with `#[export_stable]` attribute uses type `{$ty}`, which is not exportable
+    .label = not exportable
+
+passes_unexportable_type_repr = types with unstable layout are not exportable
 
 passes_unknown_feature =
     unknown feature `{$feature}`
@@ -770,8 +801,8 @@ passes_unreachable_due_to_uninhabited = unreachable {$descr}
     .label_orig = any code following this expression is unreachable
     .note = this expression has type `{$ty}`, which is uninhabited
 
-passes_unrecognized_field =
-    unrecognized field name `{$name}`
+passes_unrecognized_argument =
+    unrecognized argument
 
 passes_unstable_attr_for_already_stable_feature =
     can't mark as unstable using an already stable feature

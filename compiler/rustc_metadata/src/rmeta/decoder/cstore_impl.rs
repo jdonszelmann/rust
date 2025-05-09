@@ -24,7 +24,7 @@ use super::{Decodable, DecodeContext, DecodeIterator};
 use crate::creader::{CStore, LoadedMacro};
 use crate::rmeta::AttrFlags;
 use crate::rmeta::table::IsDefault;
-use crate::{foreign_modules, native_libs};
+use crate::{eii, foreign_modules, native_libs};
 
 trait ProcessQueryValue<'tcx, T> {
     fn process_decoded(self, _tcx: TyCtxt<'tcx>, _err: impl Fn() -> !) -> T;
@@ -286,7 +286,7 @@ provide! { tcx, def_id, other, cdata,
     rendered_const => { table }
     rendered_precise_capturing_args => { table }
     asyncness => { table_direct }
-    fn_arg_names => { table }
+    fn_arg_idents => { table }
     coroutine_kind => { table_direct }
     coroutine_for_closure => { table }
     coroutine_by_move_body_def_id => { table }
@@ -330,14 +330,8 @@ provide! { tcx, def_id, other, cdata,
 
     visibility => { cdata.get_visibility(def_id.index) }
     adt_def => { cdata.get_adt_def(def_id.index, tcx) }
-    adt_destructor => {
-        let _ = cdata;
-        tcx.calculate_dtor(def_id, |_,_| Ok(()))
-    }
-    adt_async_destructor => {
-        let _ = cdata;
-        tcx.calculate_async_dtor(def_id, |_,_| Ok(()))
-    }
+    adt_destructor => { table }
+    adt_async_destructor => { table }
     associated_item_def_ids => {
         tcx.arena.alloc_from_iter(cdata.get_associated_item_or_field_def_ids(def_id.index))
     }
@@ -354,7 +348,6 @@ provide! { tcx, def_id, other, cdata,
     is_compiler_builtins => { cdata.root.compiler_builtins }
     has_global_allocator => { cdata.root.has_global_allocator }
     has_alloc_error_handler => { cdata.root.has_alloc_error_handler }
-    has_panic_handler => { cdata.root.has_panic_handler }
     is_profiler_runtime => { cdata.root.profiler_runtime }
     required_panic_strategy => { cdata.root.required_panic_strategy }
     panic_in_drop_strategy => { cdata.root.panic_in_drop_strategy }
@@ -379,6 +372,13 @@ provide! { tcx, def_id, other, cdata,
     }
     native_libraries => { cdata.get_native_libraries(tcx.sess).collect() }
     foreign_modules => { cdata.get_foreign_modules(tcx.sess).map(|m| (m.def_id, m)).collect() }
+    externally_implementable_items => {
+    cdata.get_externally_implementable_items(tcx.sess)
+        .map(|(decl_did, (decl, impls))| (
+            decl_did,
+            (decl, impls.into_iter().collect())
+        )).collect()
+    }
     crate_hash => { cdata.root.header.hash }
     crate_host_hash => { cdata.host_hash }
     crate_name => { cdata.root.header.name }
@@ -412,6 +412,8 @@ provide! { tcx, def_id, other, cdata,
     used_crate_source => { Arc::clone(&cdata.source) }
     debugger_visualizers => { cdata.get_debugger_visualizers() }
 
+    exportable_items => { tcx.arena.alloc_from_iter(cdata.get_exportable_items()) }
+    stable_order_of_exportable_impls => { tcx.arena.alloc(cdata.get_stable_order_of_exportable_impls().collect()) }
     exported_symbols => {
         let syms = cdata.exported_symbols(tcx);
 
@@ -454,6 +456,7 @@ pub(in crate::rmeta) fn provide(providers: &mut Providers) {
         },
         native_libraries: native_libs::collect,
         foreign_modules: foreign_modules::collect,
+        externally_implementable_items: eii::collect,
 
         // Returns a map from a sufficiently visible external item (i.e., an
         // external item that is visible from at least one local module) to a

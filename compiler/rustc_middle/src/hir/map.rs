@@ -1,3 +1,7 @@
+//! This module used to contain a type called `Map`. That type has since been
+//! eliminated, and all its methods are now on `TyCtxt`. But the module name
+//! stays as `map` because there isn't an obviously better name for it.
+
 use rustc_abi::ExternAbi;
 use rustc_ast::visit::{VisitorResult, walk_list};
 use rustc_data_structures::fingerprint::Fingerprint;
@@ -15,17 +19,9 @@ use rustc_span::{ErrorGuaranteed, Ident, Span, Symbol, kw, sym, with_metavar_spa
 
 use crate::hir::{ModuleItems, nested_filter};
 use crate::middle::debugger_visualizer::DebuggerVisualizerFile;
+use crate::middle::eii::EiiMapping;
 use crate::query::LocalCrate;
 use crate::ty::TyCtxt;
-
-// FIXME: the structure was necessary in the past but now it
-// only serves as "namespace" for HIR-related methods, and can be
-// removed if all the methods are reasonably renamed and moved to tcx
-// (https://github.com/rust-lang/rust/pull/118256#issuecomment-1826442834).
-#[derive(Copy, Clone)]
-pub struct Map<'hir> {
-    pub(super) tcx: TyCtxt<'hir>,
-}
 
 /// An iterator that walks up the ancestor tree of a given `HirId`.
 /// Constructed using `tcx.hir_parent_iter(hir_id)`.
@@ -273,14 +269,14 @@ impl<'tcx> TyCtxt<'tcx> {
         self.hir_maybe_body_owned_by(id).unwrap_or_else(|| {
             let hir_id = self.local_def_id_to_hir_id(id);
             span_bug!(
-                self.hir().span(hir_id),
+                self.hir_span(hir_id),
                 "body_owned_by: {} has no associated body",
                 self.hir_id_to_string(hir_id)
             );
         })
     }
 
-    pub fn hir_body_param_names(self, id: BodyId) -> impl Iterator<Item = Option<Ident>> {
+    pub fn hir_body_param_idents(self, id: BodyId) -> impl Iterator<Item = Option<Ident>> {
         self.hir_body(id).params.iter().map(|param| match param.pat.kind {
             PatKind::Binding(_, _, ident, _) => Some(ident),
             PatKind::Wild => Some(Ident::new(kw::Underscore, param.pat.span)),
@@ -334,7 +330,7 @@ impl<'tcx> TyCtxt<'tcx> {
 
     /// Returns an iterator of the `DefId`s for all body-owners in this
     /// crate. If you would prefer to iterate over the bodies
-    /// themselves, you can do `self.hir().krate().body_ids.iter()`.
+    /// themselves, you can do `self.hir_crate(()).body_ids.iter()`.
     #[inline]
     pub fn hir_body_owners(self) -> impl Iterator<Item = LocalDefId> {
         self.hir_crate_items(()).body_owners.iter().copied()
@@ -342,7 +338,7 @@ impl<'tcx> TyCtxt<'tcx> {
 
     #[inline]
     pub fn par_hir_body_owners(self, f: impl Fn(LocalDefId) + DynSend + DynSync) {
-        par_for_each_in(&self.hir_crate_items(()).body_owners[..], |&def_id| f(def_id));
+        par_for_each_in(&self.hir_crate_items(()).body_owners[..], |&&def_id| f(def_id));
     }
 
     pub fn hir_ty_param_owner(self, def_id: LocalDefId) -> LocalDefId {
@@ -365,10 +361,6 @@ impl<'tcx> TyCtxt<'tcx> {
             }
             _ => bug!("ty_param_name: {:?} is a {:?} not a type parameter", def_id, def_kind),
         }
-    }
-
-    pub fn hir_trait_impls(self, trait_did: DefId) -> &'tcx [LocalDefId] {
-        self.all_local_trait_impls(()).get(&trait_did).map_or(&[], |xs| &xs[..])
     }
 
     /// Gets the attributes on the crate. This is preferable to
@@ -681,9 +673,8 @@ impl<'tcx> TyCtxt<'tcx> {
     pub fn hir_id_to_string(self, id: HirId) -> String {
         let path_str = |def_id: LocalDefId| self.def_path_str(def_id);
 
-        let span_str = || {
-            self.sess.source_map().span_to_snippet(Map { tcx: self }.span(id)).unwrap_or_default()
-        };
+        let span_str =
+            || self.sess.source_map().span_to_snippet(self.hir_span(id)).unwrap_or_default();
         let node_str = |prefix| format!("{id} ({prefix} `{}`)", span_str());
 
         match self.hir_node(id) {
@@ -879,12 +870,10 @@ impl<'tcx> TyCtxt<'tcx> {
     pub fn hir_attrs(self, id: HirId) -> &'tcx [Attribute] {
         self.hir_attr_map(id.owner).get(id.local_id)
     }
-}
 
-impl<'hir> Map<'hir> {
     /// Gets the span of the definition of the specified HIR node.
     /// This is used by `tcx.def_span`.
-    pub fn span(self, hir_id: HirId) -> Span {
+    pub fn hir_span(self, hir_id: HirId) -> Span {
         fn until_within(outer: Span, end: Span) -> Span {
             if let Some(end) = end.find_ancestor_inside(outer) {
                 outer.with_hi(end.hi())
@@ -904,7 +893,7 @@ impl<'hir> Map<'hir> {
             span
         }
 
-        let span = match self.tcx.hir_node(hir_id) {
+        let span = match self.hir_node(hir_id) {
             // Function-like.
             Node::Item(Item { kind: ItemKind::Fn { sig, .. }, span: outer_span, .. })
             | Node::TraitItem(TraitItem {
@@ -984,7 +973,7 @@ impl<'hir> Map<'hir> {
             Node::Variant(variant) => named_span(variant.span, variant.ident, None),
             Node::ImplItem(item) => named_span(item.span, item.ident, Some(item.generics)),
             Node::ForeignItem(item) => named_span(item.span, item.ident, None),
-            Node::Ctor(_) => return self.span(self.tcx.parent_hir_id(hir_id)),
+            Node::Ctor(_) => return self.hir_span(self.parent_hir_id(hir_id)),
             Node::Expr(Expr {
                 kind: ExprKind::Closure(Closure { fn_decl_span, .. }),
                 span,
@@ -993,16 +982,16 @@ impl<'hir> Map<'hir> {
                 // Ensure that the returned span has the item's SyntaxContext.
                 fn_decl_span.find_ancestor_inside(*span).unwrap_or(*span)
             }
-            _ => self.span_with_body(hir_id),
+            _ => self.hir_span_with_body(hir_id),
         };
-        debug_assert_eq!(span.ctxt(), self.span_with_body(hir_id).ctxt());
+        debug_assert_eq!(span.ctxt(), self.hir_span_with_body(hir_id).ctxt());
         span
     }
 
-    /// Like `hir.span()`, but includes the body of items
+    /// Like `hir_span()`, but includes the body of items
     /// (instead of just the item header)
-    pub fn span_with_body(self, hir_id: HirId) -> Span {
-        match self.tcx.hir_node(hir_id) {
+    pub fn hir_span_with_body(self, hir_id: HirId) -> Span {
+        match self.hir_node(hir_id) {
             Node::Param(param) => param.span,
             Node::Item(item) => item.span,
             Node::ForeignItem(foreign_item) => foreign_item.span,
@@ -1011,7 +1000,7 @@ impl<'hir> Map<'hir> {
             Node::Variant(variant) => variant.span,
             Node::Field(field) => field.span,
             Node::AnonConst(constant) => constant.span,
-            Node::ConstBlock(constant) => self.tcx.hir_body(constant.body).value.span,
+            Node::ConstBlock(constant) => self.hir_body(constant.body).value.span,
             Node::ConstArg(const_arg) => const_arg.span(),
             Node::Expr(expr) => expr.span,
             Node::ExprField(field) => field.span,
@@ -1031,7 +1020,7 @@ impl<'hir> Map<'hir> {
             Node::PatExpr(lit) => lit.span,
             Node::Arm(arm) => arm.span,
             Node::Block(block) => block.span,
-            Node::Ctor(..) => self.span_with_body(self.tcx.parent_hir_id(hir_id)),
+            Node::Ctor(..) => self.hir_span_with_body(self.parent_hir_id(hir_id)),
             Node::Lifetime(lifetime) => lifetime.ident.span,
             Node::GenericParam(param) => param.span,
             Node::Infer(i) => i.span,
@@ -1039,28 +1028,36 @@ impl<'hir> Map<'hir> {
             Node::Crate(item) => item.spans.inner_span,
             Node::WherePredicate(pred) => pred.span,
             Node::PreciseCapturingNonLifetimeArg(param) => param.ident.span,
-            Node::Synthetic => unreachable!(),
+            Node::Synthetic => {
+                if let Some(EiiMapping { chosen_impl, .. }) =
+                    self.get_externally_implementable_item_impls(()).get(&hir_id.owner.def_id)
+                {
+                    self.def_span(chosen_impl)
+                } else {
+                    unreachable!()
+                }
+            }
             Node::Err(span) => span,
         }
     }
 
-    pub fn span_if_local(self, id: DefId) -> Option<Span> {
-        id.is_local().then(|| self.tcx.def_span(id))
+    pub fn hir_span_if_local(self, id: DefId) -> Option<Span> {
+        id.is_local().then(|| self.def_span(id))
     }
 
-    pub fn res_span(self, res: Res) -> Option<Span> {
+    pub fn hir_res_span(self, res: Res) -> Option<Span> {
         match res {
             Res::Err => None,
-            Res::Local(id) => Some(self.span(id)),
-            res => self.span_if_local(res.opt_def_id()?),
+            Res::Local(id) => Some(self.hir_span(id)),
+            res => self.hir_span_if_local(res.opt_def_id()?),
         }
     }
 
     /// Returns the HirId of `N` in `struct Foo<const N: usize = { ... }>` when
     /// called with the HirId for the `{ ... }` anon const
-    pub fn opt_const_param_default_param_def_id(self, anon_const: HirId) -> Option<LocalDefId> {
-        let const_arg = self.tcx.parent_hir_id(anon_const);
-        match self.tcx.parent_hir_node(const_arg) {
+    pub fn hir_opt_const_param_default_param_def_id(self, anon_const: HirId) -> Option<LocalDefId> {
+        let const_arg = self.parent_hir_id(anon_const);
+        match self.parent_hir_node(const_arg) {
             Node::GenericParam(GenericParam {
                 def_id: param_id,
                 kind: GenericParamKind::Const { .. },
@@ -1070,7 +1067,7 @@ impl<'hir> Map<'hir> {
         }
     }
 
-    pub fn maybe_get_struct_pattern_shorthand_field(&self, expr: &Expr<'_>) -> Option<Symbol> {
+    pub fn hir_maybe_get_struct_pattern_shorthand_field(self, expr: &Expr<'_>) -> Option<Symbol> {
         let local = match expr {
             Expr {
                 kind:
@@ -1085,7 +1082,7 @@ impl<'hir> Map<'hir> {
             _ => None,
         }?;
 
-        match self.tcx.parent_hir_node(expr.hir_id) {
+        match self.parent_hir_node(expr.hir_id) {
             Node::ExprField(field) => {
                 if field.ident.name == local.name && field.is_shorthand {
                     return Some(local.name);

@@ -23,7 +23,7 @@ pub(crate) struct AmbiguousAssocItem<'a> {
     #[label]
     pub span: Span,
     pub assoc_kind: &'static str,
-    pub assoc_name: Ident,
+    pub assoc_ident: Ident,
     pub qself: &'a str,
 }
 
@@ -75,7 +75,7 @@ pub(crate) struct AssocItemIsPrivate {
 pub(crate) struct AssocItemNotFound<'a> {
     #[primary_span]
     pub span: Span,
-    pub assoc_name: Ident,
+    pub assoc_ident: Ident,
     pub assoc_kind: &'static str,
     pub qself: &'a str,
     #[subdiagnostic]
@@ -205,6 +205,31 @@ pub(crate) struct LifetimesOrBoundsMismatchOnTrait {
     pub bounds_span: Vec<Span>,
     pub item_kind: &'static str,
     pub ident: Ident,
+}
+
+#[derive(Diagnostic)]
+#[diag(hir_analysis_lifetimes_or_bounds_mismatch_on_eii)]
+pub(crate) struct LifetimesOrBoundsMismatchOnEII {
+    #[primary_span]
+    #[label]
+    pub span: Span,
+    #[label(hir_analysis_generics_label)]
+    pub generics_span: Option<Span>,
+    #[label(hir_analysis_where_label)]
+    pub where_span: Option<Span>,
+    #[label(hir_analysis_bounds_label)]
+    pub bounds_span: Vec<Span>,
+    pub ident: Symbol,
+}
+
+#[derive(Diagnostic)]
+#[diag(hir_analysis_eii_with_generics)]
+pub(crate) struct EiiWithGenerics {
+    #[primary_span]
+    pub span: Span,
+    #[label]
+    pub attr: Span,
+    pub eii_name: Symbol,
 }
 
 #[derive(Diagnostic)]
@@ -1675,14 +1700,6 @@ pub(crate) struct CmseEntryGeneric {
     pub span: Span,
 }
 
-#[derive(Diagnostic)]
-#[diag(hir_analysis_register_type_unstable)]
-pub(crate) struct RegisterTypeUnstable<'a> {
-    #[primary_span]
-    pub span: Span,
-    pub ty: Ty<'a>,
-}
-
 #[derive(LintDiagnostic)]
 #[diag(hir_analysis_supertrait_item_shadowing)]
 pub(crate) struct SupertraitItemShadowing {
@@ -1706,4 +1723,12 @@ pub(crate) enum SupertraitItemShadowee {
         spans: MultiSpan,
         traits: DiagSymbolList,
     },
+}
+
+#[derive(Diagnostic)]
+#[diag(hir_analysis_self_in_type_alias, code = E0411)]
+pub(crate) struct SelfInTypeAlias {
+    #[primary_span]
+    #[label]
+    pub span: Span,
 }

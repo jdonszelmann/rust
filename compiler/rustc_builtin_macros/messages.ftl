@@ -79,6 +79,7 @@ builtin_macros_autodiff_ret_activity = invalid return activity {$act} in {$mode}
 builtin_macros_autodiff_ty_activity = {$act} can not be used for this type
 builtin_macros_autodiff_unknown_activity = did not recognize Activity: `{$act}`
 
+builtin_macros_autodiff_width = autodiff width must fit u32, but is {$width}
 builtin_macros_bad_derive_target = `derive` may only be applied to `struct`s, `enum`s and `union`s
     .label = not applicable here
     .label2 = not a `struct`, `enum` or `union`
@@ -148,6 +149,13 @@ builtin_macros_derive_path_args_list = traits in `#[derive(...)]` don't accept a
 
 builtin_macros_derive_path_args_value = traits in `#[derive(...)]` don't accept values
     .suggestion = remove the value
+
+builtin_macros_eii_macro_expected_function = `#[{$name}]` is only valid on functions
+builtin_macros_eii_macro_for_expected_list = `#[eii_macro_for(...)]` expects a list of one or two elements
+builtin_macros_eii_macro_for_expected_macro = `#[eii_macro_for(...)]` is only valid on macros
+builtin_macros_eii_macro_for_expected_max_one_argument = `#[{$name}]` expected no arguments or a single argument: `#[{$name}(default)]`
+builtin_macros_eii_macro_for_expected_unsafe = expected this argument to be "unsafe"
+    .note = the second argument is optional
 
 builtin_macros_env_not_defined = environment variable `{$var}` not defined at compile time
     .cargo = Cargo sets build script variables at run time. Use `std::env::var({$var_expr})` instead
@@ -230,8 +238,6 @@ builtin_macros_format_unused_args = multiple unused formatting arguments
 
 builtin_macros_format_use_positional = consider using a positional formatting argument instead
 
-builtin_macros_invalid_crate_attribute = invalid crate attribute
-
 builtin_macros_multiple_default_attrs = multiple `#[default]` attributes
     .note = only one `#[default]` attribute is needed
     .label = `#[default]` used here
@@ -248,9 +254,9 @@ builtin_macros_multiple_defaults = multiple declared defaults
     .suggestion = make `{$ident}` default
 
 builtin_macros_naked_functions_testing_attribute =
-    cannot use `#[naked]` with testing attributes
+    cannot use `#[unsafe(naked)]` with testing attributes
     .label = function marked with testing attribute here
-    .naked_attribute = `#[naked]` is incompatible with testing attributes
+    .naked_attribute = `#[unsafe(naked)]` is incompatible with testing attributes
 
 builtin_macros_no_default_variant = `#[derive(Default)]` on enum with no `#[default]`
     .label = this enum needs a unit variant marked with `#[default]`

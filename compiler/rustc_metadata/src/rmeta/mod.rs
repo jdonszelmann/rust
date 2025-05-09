@@ -8,6 +8,7 @@ use encoder::EncodeContext;
 pub use encoder::{EncodedMetadata, encode_metadata, rendered_const};
 use rustc_abi::{FieldIdx, ReprOptions, VariantIdx};
 use rustc_ast::expand::StrippedCfgItem;
+use rustc_attr_parsing::{EIIDecl, EIIImpl};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::svh::Svh;
 use rustc_hir::PreciseCapturingArgKind;
@@ -36,7 +37,7 @@ use rustc_serialize::opaque::FileEncoder;
 use rustc_session::config::{SymbolManglingVersion, TargetModifier};
 use rustc_session::cstore::{CrateDepKind, ForeignModule, LinkagePreference, NativeLib};
 use rustc_span::edition::Edition;
-use rustc_span::hygiene::{ExpnIndex, MacroKind, SyntaxContextData};
+use rustc_span::hygiene::{ExpnIndex, MacroKind, SyntaxContextKey};
 use rustc_span::{self, ExpnData, ExpnHash, ExpnId, Ident, Span, Symbol};
 use rustc_target::spec::{PanicStrategy, TargetTuple};
 use table::TableBuilder;
@@ -56,7 +57,7 @@ pub(crate) fn rustc_version(cfg_version: &'static str) -> String {
 /// Metadata encoding version.
 /// N.B., increment this if you change the format of metadata such that
 /// the rustc version can't be found to compare with `rustc_version()`.
-const METADATA_VERSION: u8 = 9;
+const METADATA_VERSION: u8 = 10;
 
 /// Metadata header which includes `METADATA_VERSION`.
 ///
@@ -193,7 +194,7 @@ enum LazyState {
     Previous(NonZero<usize>),
 }
 
-type SyntaxContextTable = LazyTable<u32, Option<LazyValue<SyntaxContextData>>>;
+type SyntaxContextTable = LazyTable<u32, Option<LazyValue<SyntaxContextKey>>>;
 type ExpnDataTable = LazyTable<ExpnIndex, Option<LazyValue<ExpnData>>>;
 type ExpnHashTable = LazyTable<ExpnIndex, Option<LazyValue<ExpnHash>>>;
 
@@ -221,6 +222,12 @@ pub(crate) struct CrateHeader {
     /// This is separate from [`ProcMacroData`] to avoid having to update [`METADATA_VERSION`] every
     /// time ProcMacroData changes.
     pub(crate) is_proc_macro_crate: bool,
+    /// Whether this crate metadata section is just a stub.
+    /// Stubs do not contain the full metadata (it will be typically stored
+    /// in a separate rmeta file).
+    ///
+    /// This is used inside rlibs and dylibs when using `-Zembed-metadata=no`.
+    pub(crate) is_stub: bool,
 }
 
 /// Serialized `.rmeta` data for a crate.
@@ -250,10 +257,12 @@ pub(crate) struct CrateRoot {
     required_panic_strategy: Option<PanicStrategy>,
     panic_in_drop_strategy: PanicStrategy,
     edition: Edition,
+
+    // FIXME(jdonszelmann): these booleans can be replaced by the entries in `externally_implementable_items`
     has_global_allocator: bool,
     has_alloc_error_handler: bool,
-    has_panic_handler: bool,
     has_default_lib_allocator: bool,
+    externally_implementable_items: LazyArray<(DefId, (EIIDecl, Vec<(DefId, EIIImpl)>))>,
 
     crate_deps: LazyArray<CrateDep>,
     dylib_dependency_formats: LazyArray<Option<LinkagePreference>>,
@@ -274,6 +283,8 @@ pub(crate) struct CrateRoot {
     tables: LazyTables,
     debugger_visualizers: LazyArray<DebuggerVisualizerFile>,
 
+    exportable_items: LazyArray<DefIndex>,
+    stable_order_of_exportable_impls: LazyArray<(DefIndex, usize)>,
     exported_symbols: LazyArray<(ExportedSymbol<'static>, SymbolExportInfo)>,
 
     syntax_contexts: SyntaxContextTable,
@@ -443,9 +454,11 @@ define_tables! {
     rendered_const: Table<DefIndex, LazyValue<String>>,
     rendered_precise_capturing_args: Table<DefIndex, LazyArray<PreciseCapturingArgKind<Symbol, Symbol>>>,
     asyncness: Table<DefIndex, ty::Asyncness>,
-    fn_arg_names: Table<DefIndex, LazyArray<Option<Ident>>>,
+    fn_arg_idents: Table<DefIndex, LazyArray<Option<Ident>>>,
     coroutine_kind: Table<DefIndex, hir::CoroutineKind>,
     coroutine_for_closure: Table<DefIndex, RawDefId>,
+    adt_destructor: Table<DefIndex, LazyValue<ty::Destructor>>,
+    adt_async_destructor: Table<DefIndex, LazyValue<ty::AsyncDestructor>>,
     coroutine_by_move_body_def_id: Table<DefIndex, RawDefId>,
     eval_static_initializer: Table<DefIndex, LazyValue<mir::interpret::ConstAllocation<'static>>>,
     trait_def: Table<DefIndex, LazyValue<ty::TraitDef>>,
@@ -576,7 +589,7 @@ impl SpanTag {
 // Tags for encoding Symbol's
 const SYMBOL_STR: u8 = 0;
 const SYMBOL_OFFSET: u8 = 1;
-const SYMBOL_PREINTERNED: u8 = 2;
+const SYMBOL_PREDEFINED: u8 = 2;
 
 pub fn provide(providers: &mut Providers) {
     encoder::provide(providers);
