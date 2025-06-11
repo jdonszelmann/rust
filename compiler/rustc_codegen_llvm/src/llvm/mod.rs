@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::string::FromUtf8Error;
 
 use libc::c_uint;
-use rustc_abi::{Align, Size, WrappingRange};
+use rustc_abi::{AddressSpace, Align, Size, WrappingRange};
 use rustc_llvm::RustString;
 
 pub(crate) use self::CallConv::*;
@@ -324,6 +324,20 @@ pub(crate) fn get_value_name(value: &Value) -> &[u8] {
         let mut len = 0;
         let data = LLVMGetValueName2(value, &mut len);
         std::slice::from_raw_parts(data.cast(), len)
+    }
+}
+
+/// Safe wrapper for `LLVMAddAlias2`
+pub(crate) fn add_alias(
+    module: &Module,
+    ty: &Type,
+    address_space: AddressSpace,
+    aliasee: &Value,
+    name: &[u8],
+) {
+    unsafe {
+        let data = name.as_c_char_ptr();
+        LLVMAddAlias2(value, data, address_space, aliasee, name.len());
     }
 }
 
