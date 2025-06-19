@@ -54,6 +54,64 @@ pub(crate) mod util;
 type AcceptFn<T, S> = for<'sess> fn(&mut T, &mut AcceptContext<'_, 'sess, S>, &ArgParser<'_>);
 type AcceptMapping<T, S> = &'static [(&'static [Symbol], AttributeTemplate, AcceptFn<T, S>)];
 
+#[macro_export]
+macro_rules! targets {
+    (
+        $($($pat: tt)|* => $judgement: tt),* $(,)?
+    ) => {
+        |cx: &FinalizeContext<'_, '_, _>, error_span: Span| {
+            use rustc_hir::Target::*;
+
+            let acceptable_targets = || {
+                let targets: Vec<_> = targets!(@find_valid [] $([$($pat)|* => $judgement])*);
+                let len = targets.len();
+
+                (rustc_errors::DiagArgValue::StrListSepByAnd(targets), len)
+            };
+
+            match cx.target.kind {
+                $(
+                    $($pat)|* => targets!(@judge [acceptable_targets cx error_span] $judgement)
+                ),*
+            };
+        }
+    };
+
+    (@find_valid [$($tt:tt)*] [_ => $first_judgement: tt] $([$($pat: tt)|* => $judgement: tt])*) => {
+        targets!(@find_valid [$($tt)*] $([$($pat)|* => $judgement])*)
+    };
+    (@find_valid [$($tt:tt)*] [$($first_pat: tt)|* => ok] $([$($pat: tt)|* => $judgement: tt])*) => {
+        targets!(@find_valid [$($tt)* $([$first_pat.name().into()])*] $([$($pat)|* => $judgement])*)
+    };
+    (@find_valid [$($tt:tt)*] [$($first_pat: tt)|* => $first_judgement: tt] $([$($pat: path)|* => $judgement: tt])*) => {
+        targets!(@find_valid [$($tt)*] $([$($pat)|* => $judgement])*)
+    };
+    (@find_valid [$([$($tt:tt)*])*]) => {
+        vec![$($($tt)*),*]
+    };
+
+    (@judge [$($tt:tt)*] ok) => {
+        {}
+    };
+    (@judge [$($tt:tt)*] err) => {compile_error!(
+        "did you mean `error`?"
+    )};
+    (@judge [$ok: ident $cx: ident $error_span: ident] error) => {
+        {
+            let (res, num) = $ok();
+            $cx.emit_err($crate::session_diagnostics::GenericWrongTarget {
+                attr_span: $error_span,
+                target_span: $cx.target.span,
+                target: $cx.target.kind.name(),
+                ok_targets: res,
+                num_ok_targets: num,
+            });
+        }
+    };
+    (@judge [$($tt:tt)*] warn) => {};
+    (@judge [$($tt:tt)*] $expr: expr) => {$expr};
+}
+
 /// An [`AttributeParser`] is a type which searches for syntactic attributes.
 ///
 /// Parsers are often tiny state machines that gets to see all syntactical attributes on an item.
@@ -166,7 +224,8 @@ impl<T: SingleAttributeParser<S>, S: Stage> AttributeParser<S> for Single<T, S> 
     )];
 
     fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
-        cx.some(self.1?.0)
+        let (kind, span) = self.1?;
+        cx.some(kind, |_, _| todo!(), span)
     }
 }
 
@@ -306,21 +365,15 @@ pub(crate) trait CombineAttributeParser<S: Stage>: 'static {
 
 /// Use in combination with [`CombineAttributeParser`].
 /// `Combine<T: CombineAttributeParser>` implements [`AttributeParser`].
-pub(crate) struct Combine<T: CombineAttributeParser<S>, S: Stage> {
-    phantom: PhantomData<(S, T)>,
-    /// A list of all items produced by parsing attributes so far. One attribute can produce any amount of items.
-    items: ThinVec<<T as CombineAttributeParser<S>>::Item>,
-    /// The full span of the first attribute that was encountered.
-    first_span: Option<Span>,
-}
+pub(crate) struct Combine<T: CombineAttributeParser<S>, S: Stage>(
+    PhantomData<(S, T)>,
+    ThinVec<<T as CombineAttributeParser<S>>::Item>,
+    Option<Span>,
+);
 
 impl<T: CombineAttributeParser<S>, S: Stage> Default for Combine<T, S> {
     fn default() -> Self {
-        Self {
-            phantom: Default::default(),
-            items: Default::default(),
-            first_span: Default::default(),
-        }
+        Self(Default::default(), Default::default(), None)
     }
 }
 
@@ -329,17 +382,20 @@ impl<T: CombineAttributeParser<S>, S: Stage> AttributeParser<S> for Combine<T, S
         T::PATH,
         <T as CombineAttributeParser<S>>::TEMPLATE,
         |group: &mut Combine<T, S>, cx, args| {
-            // Keep track of the span of the first attribute, for diagnostics
-            group.first_span.get_or_insert(cx.attr_span);
-            group.items.extend(T::extend(cx, args))
+            group.1.extend(T::extend(cx, args));
+
+            if group.2.is_none() {
+                // TODO: multispan?
+                group.2 = Some(cx.attr_span)
+            }
         },
     )];
 
-    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
-        if let Some(first_span) = self.first_span {
-            cx.some(T::CONVERT(self.items, first_span))
-        } else {
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
+        if self.1.is_empty() {
             cx.none()
+        } else {
+            cx.some(T::CONVERT(self.1), |_, _| todo!(), self.2.unwrap())
         }
     }
 }

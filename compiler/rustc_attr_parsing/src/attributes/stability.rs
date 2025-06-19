@@ -14,6 +14,7 @@ use crate::attributes::NoArgsAttributeParser;
 use crate::context::{AcceptContext, FinalizeContext, FinalizedAttribute, Stage};
 use crate::parser::{ArgParser, MetaItemParser};
 use crate::session_diagnostics::{self, UnsupportedLiteralReason};
+use crate::targets;
 
 macro_rules! reject_outside_std {
     ($cx: ident) => {
@@ -217,7 +218,14 @@ impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
 
         let (stability, span) = self.stability?;
 
-        cx.some(AttributeKind::ConstStability { stability, span })
+        cx.some(
+            AttributeKind::ConstStability { stability, span },
+            targets! {
+                Expression => ok,
+                _ => error,
+            },
+            span,
+        )
     }
 }
 

@@ -232,7 +232,14 @@ impl<S: Stage> FinalizeContext<'_, '_, S> {
         FinalizedAttribute { parsed: None }
     }
 
-    pub(crate) fn some(&self, attribute: AttributeKind) -> FinalizedAttribute {
+    /// targets can be conveniently passed using [`targets!()`](crate::attributes::targets)
+    pub(crate) fn some(
+        &self,
+        attribute: AttributeKind,
+        target_valid: impl FnOnce(&Self, Span),
+        target_error_span: Span,
+    ) -> FinalizedAttribute {
+        target_valid(self, target_error_span);
         FinalizedAttribute { parsed: Some(attribute) }
     }
 }
