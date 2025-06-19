@@ -9,7 +9,7 @@ use rustc_attr_data_structures::AttributeKind;
 use rustc_attr_data_structures::lints::{AttributeLint, AttributeLintKind};
 use rustc_errors::{DiagCtxtHandle, Diagnostic};
 use rustc_feature::{AttributeTemplate, Features};
-use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId, HirId};
+use rustc_hir::{AttrArgs, AttrItem, AttrPath, Attribute, HashIgnoredAttrId, HirId, Target};
 use rustc_session::Session;
 use rustc_span::{DUMMY_SP, ErrorGuaranteed, Span, Symbol, sym};
 
@@ -303,7 +303,7 @@ impl<'f, 'sess: 'f, S: Stage> SharedContext<'f, 'sess, S> {
         if !S::SHOULD_EMIT_LINTS {
             return;
         }
-        let id = self.target_id;
+        let id = self.target.id;
         (self.emit_lint)(AttributeLint { id, span, kind: lint });
     }
 
@@ -535,6 +535,16 @@ impl<'f, 'sess, S: Stage> DerefMut for AcceptContext<'f, 'sess, S> {
     }
 }
 
+/// Information about the syntactical component this attribute was applied to
+pub struct AttributeTarget<S: Stage> {
+    /// The kind of target
+    pub kind: Target,
+    /// The target's span
+    pub span: Span,
+    /// The target's id ([`NodeId`] if `S` is `Early`, [`HirId`] if `S` is `Late`) of the syntactical component this attribute was applied to
+    pub id: S::Id,
+}
+
 /// Context given to every attribute parser during finalization.
 ///
 /// Gives [`AttributeParser`](crate::attributes::AttributeParser)s enough information to create
@@ -544,9 +554,7 @@ pub struct SharedContext<'p, 'sess, S: Stage> {
     /// diagnostics context.
     pub(crate) cx: &'p mut AttributeParser<'sess, S>,
     /// The span of the syntactical component this attribute was applied to
-    pub(crate) target_span: Span,
-    /// The id ([`NodeId`] if `S` is `Early`, [`HirId`] if `S` is `Late`) of the syntactical component this attribute was applied to
-    pub(crate) target_id: S::Id,
+    pub(crate) target: &'p AttributeTarget<S>,
 
     emit_lint: &'p mut dyn FnMut(AttributeLint<S::Id>),
 }
@@ -653,8 +661,7 @@ impl<'sess> AttributeParser<'sess, Early> {
         sess: &'sess Session,
         attrs: &[ast::Attribute],
         sym: Symbol,
-        target_span: Span,
-        target_node_id: NodeId,
+        target: AttributeTarget<Early>,
         features: Option<&'sess Features>,
     ) -> Option<Attribute> {
         let mut p = Self {
@@ -664,16 +671,10 @@ impl<'sess> AttributeParser<'sess, Early> {
             sess,
             stage: Early { emit_errors: ShouldEmit::Nothing },
         };
-        let mut parsed = p.parse_attribute_list(
-            attrs,
-            target_span,
-            target_node_id,
-            OmitDoc::Skip,
-            std::convert::identity,
-            |_lint| {
+        let mut parsed =
+            p.parse_attribute_list(attrs, target, OmitDoc::Skip, std::convert::identity, |_lint| {
                 panic!("can't emit lints here for now (nothing uses this atm)");
-            },
-        );
+            });
         assert!(parsed.len() <= 1);
 
         parsed.pop()
@@ -752,8 +753,7 @@ impl<'sess, S: Stage> AttributeParser<'sess, S> {
     pub fn parse_attribute_list(
         &mut self,
         attrs: &[ast::Attribute],
-        target_span: Span,
-        target_id: S::Id,
+        target: AttributeTarget<S>,
         omit_doc: OmitDoc,
 
         lower_span: impl Copy + Fn(Span) -> Span,
@@ -816,8 +816,7 @@ impl<'sess, S: Stage> AttributeParser<'sess, S> {
                             let mut cx: AcceptContext<'_, 'sess, S> = AcceptContext {
                                 shared: SharedContext {
                                     cx: self,
-                                    target_span,
-                                    target_id,
+                                    target: &target,
                                     emit_lint: &mut emit_lint,
                                 },
                                 attr_span: lower_span(attr.span),
@@ -858,12 +857,7 @@ impl<'sess, S: Stage> AttributeParser<'sess, S> {
         let mut parsed_attributes = Vec::new();
         for f in &S::parsers().1 {
             if let Some(attr) = f(&mut FinalizeContext {
-                shared: SharedContext {
-                    cx: self,
-                    target_span,
-                    target_id,
-                    emit_lint: &mut emit_lint,
-                },
+                shared: SharedContext { cx: self, target: &target, emit_lint: &mut emit_lint },
                 all_attrs: &attr_paths,
             }) {
                 parsed_attributes.push(Attribute::Parsed(attr));

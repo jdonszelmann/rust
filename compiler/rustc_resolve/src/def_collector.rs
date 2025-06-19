@@ -4,9 +4,9 @@ use rustc_ast::visit::FnKind;
 use rustc_ast::*;
 use rustc_attr_parsing::{AttributeParser, Early, OmitDoc, ShouldEmit};
 use rustc_expand::expand::AstFragment;
-use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, CtorOf, DefKind};
 use rustc_hir::def_id::LocalDefId;
+use rustc_hir::{self as hir, Target};
 use rustc_middle::span_bug;
 use rustc_span::hygiene::LocalExpnId;
 use rustc_span::{Span, Symbol, sym};
@@ -136,8 +136,11 @@ impl<'a, 'ra, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'ra, 'tcx> {
                 );
                 let attrs = parser.parse_attribute_list(
                     &i.attrs,
-                    i.span,
-                    i.id,
+                    rustc_attr_parsing::AttributeTarget {
+                        kind: Target::MacroDef,
+                        span: i.span,
+                        id: i.id,
+                    },
                     OmitDoc::Skip,
                     std::convert::identity,
                     |_l| {

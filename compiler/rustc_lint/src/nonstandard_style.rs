@@ -1,11 +1,11 @@
 use rustc_abi::ExternAbi;
 use rustc_attr_data_structures::{AttributeKind, ReprAttr, find_attr};
-use rustc_attr_parsing::AttributeParser;
+use rustc_attr_parsing::{AttributeParser, AttributeTarget};
 use rustc_errors::Applicability;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::intravisit::{FnKind, Visitor};
-use rustc_hir::{AttrArgs, AttrItem, Attribute, GenericParamKind, PatExprKind, PatKind};
+use rustc_hir::{AttrArgs, AttrItem, Attribute, GenericParamKind, PatExprKind, PatKind, Target};
 use rustc_middle::hir::nested_filter::All;
 use rustc_middle::ty;
 use rustc_session::config::CrateType;
@@ -167,8 +167,12 @@ impl NonCamelCaseTypes {
 impl EarlyLintPass for NonCamelCaseTypes {
     fn check_item(&mut self, cx: &EarlyContext<'_>, it: &ast::Item) {
         let has_repr_c = matches!(
-            AttributeParser::parse_limited(cx.sess(), &it.attrs, sym::repr, it.span, it.id, None),
-            Some(Attribute::Parsed(AttributeKind::Repr { reprs, ..})) if reprs.iter().any(|(r, _)| r == &ReprAttr::ReprC)
+            AttributeParser::parse_limited(cx.sess(), &it.attrs, sym::repr, AttributeTarget {
+                kind: Target::from_ast_item(it),
+                span: it.span,
+                id: it.id
+            }),
+            Some(Attribute::Parsed(AttributeKind::Repr{reprs, ..})) if reprs.iter().any(|(r, _)| r == &ReprAttr::ReprC)
         );
 
         if has_repr_c {

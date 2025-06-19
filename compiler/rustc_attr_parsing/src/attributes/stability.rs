@@ -100,7 +100,7 @@ impl<S: Stage> AttributeParser<S> for StabilityParser {
                 *allowed_through_unstable_modules = Some(atum);
             } else {
                 cx.dcx().emit_err(session_diagnostics::RustcAllowedUnstablePairing {
-                    span: cx.target_span,
+                    span: cx.target.span,
                 });
             }
         }
@@ -109,7 +109,7 @@ impl<S: Stage> AttributeParser<S> for StabilityParser {
             for other_attr in cx.all_attrs {
                 if other_attr.word_is(sym::unstable_feature_bound) {
                     cx.emit_err(session_diagnostics::UnstableFeatureBoundIncompatibleStability {
-                        span: cx.target_span,
+                        span: cx.target.span,
                     });
                 }
             }
@@ -211,7 +211,7 @@ impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
                 stab.promotable = true;
             } else {
                 cx.dcx()
-                    .emit_err(session_diagnostics::RustcPromotablePairing { span: cx.target_span });
+                    .emit_err(session_diagnostics::RustcPromotablePairing { span: cx.target.span });
             }
         }
 

@@ -42,7 +42,7 @@ use std::sync::Arc;
 
 use rustc_ast::node_id::NodeMap;
 use rustc_ast::{self as ast, *};
-use rustc_attr_parsing::{AttributeParser, Late, OmitDoc};
+use rustc_attr_parsing::{AttributeParser, AttributeTarget, Late, OmitDoc};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::sorted_map::SortedMap;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
@@ -53,8 +53,8 @@ use rustc_hir::def::{DefKind, LifetimeRes, Namespace, PartialRes, PerNS, Res};
 use rustc_hir::def_id::{CRATE_DEF_ID, LOCAL_CRATE, LocalDefId};
 use rustc_hir::lints::DelayedLint;
 use rustc_hir::{
-    self as hir, AngleBrackets, ConstArg, GenericArg, HirId, ItemLocalMap, LifetimeSource,
-    LifetimeSyntax, ParamName, TraitCandidate,
+    self as hir, AngleBrackets, ConstArg, GenericArg, HirId, ItemLocalMap, LangItem,
+    LifetimeSource, LifetimeSyntax, ParamName, Target, TraitCandidate,
 };
 use rustc_index::{Idx, IndexSlice, IndexVec};
 use rustc_macros::extension;
@@ -942,11 +942,13 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         id: HirId,
         attrs: &[Attribute],
         target_span: Span,
+        target: Target,
     ) -> &'hir [hir::Attribute] {
         if attrs.is_empty() {
             &[]
         } else {
-            let lowered_attrs = self.lower_attrs_vec(attrs, self.lower_span(target_span), id);
+            let lowered_attrs =
+                self.lower_attrs_vec(attrs, self.lower_span(target_span), id, target);
 
             assert_eq!(id.owner, self.current_hir_id_owner);
             let ret = self.arena.alloc_from_iter(lowered_attrs);
@@ -971,12 +973,12 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         attrs: &[Attribute],
         target_span: Span,
         target_hir_id: HirId,
+        target: Target,
     ) -> Vec<hir::Attribute> {
         let l = self.span_lowerer();
         self.attribute_parser.parse_attribute_list(
             attrs,
-            target_span,
-            target_hir_id,
+            AttributeTarget { kind: target, span: target_span, id: target_hir_id },
             OmitDoc::Lower,
             |s| l.lower(s),
             |l| {
@@ -1939,7 +1941,12 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
         let (name, kind) = self.lower_generic_param_kind(param, source);
 
         let hir_id = self.lower_node_id(param.id);
-        self.lower_attrs(hir_id, &param.attrs, param.span());
+        self.lower_attrs(
+            hir_id,
+            &param.attrs,
+            param.span(),
+            Target::from_generic_param_kind(&kind),
+        );
         hir::GenericParam {
             hir_id,
             def_id: self.local_def_id(param.id),

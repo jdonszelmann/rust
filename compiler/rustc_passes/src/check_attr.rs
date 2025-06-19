@@ -1059,7 +1059,9 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             | Target::GenericParam { .. }
             | Target::MacroDef
             | Target::PatField
-            | Target::ExprField => None,
+            | Target::ExprField
+            | Target::ErrorMacroCall
+            | Target::Crate => None,
         } {
             tcx.dcx().emit_err(errors::DocAliasBadLocation { span, attr_str, location });
             return;
@@ -2859,7 +2861,7 @@ impl<'tcx> Visitor<'tcx> for CheckAttrVisitor<'tcx> {
     }
 
     fn visit_generic_param(&mut self, generic_param: &'tcx hir::GenericParam<'tcx>) {
-        let target = Target::from_generic_param(generic_param);
+        let target = Target::from_generic_param_kind(&generic_param.kind);
         self.check_attributes(generic_param.hir_id, generic_param.span, target, None);
         intravisit::walk_generic_param(self, generic_param)
     }
