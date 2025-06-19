@@ -4,7 +4,7 @@ use rustc_span::{Span, Symbol, sym};
 use thin_vec::ThinVec;
 
 use super::{AcceptMapping, AttributeParser};
-use crate::context::{FinalizeContext, Stage};
+use crate::context::{FinalizeContext, FinalizedAttribute, Stage};
 use crate::session_diagnostics;
 
 #[derive(Default)]
@@ -42,12 +42,12 @@ impl<S: Stage> AttributeParser<S> for ConfusablesParser {
         },
     )];
 
-    fn finalize(self, _cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
         if self.confusables.is_empty() {
-            return None;
+            return cx.none();
         }
 
-        Some(AttributeKind::Confusables {
+        cx.some(AttributeKind::Confusables {
             symbols: self.confusables,
             first_span: self.first_span.unwrap(),
         })

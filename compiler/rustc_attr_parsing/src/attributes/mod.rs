@@ -21,7 +21,7 @@ use rustc_feature::{AttributeTemplate, template};
 use rustc_span::{Span, Symbol};
 use thin_vec::ThinVec;
 
-use crate::context::{AcceptContext, FinalizeContext, Stage};
+use crate::context::{AcceptContext, FinalizeContext, FinalizedAttribute, Stage};
 use crate::parser::ArgParser;
 use crate::session_diagnostics::UnusedMultiple;
 
@@ -87,7 +87,9 @@ pub(crate) trait AttributeParser<S: Stage>: Default + 'static {
     /// that'd be equivalent to unconditionally applying an attribute to
     /// every single syntax item that could have attributes applied to it.
     /// Your accept mappings should determine whether this returns something.
-    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind>;
+    ///
+    /// You can produce a [`FinalizedAttribute`] through `cx.some(...)` or `cx.none()`
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute;
 }
 
 /// Alternative to [`AttributeParser`] that automatically handles state management.
@@ -163,8 +165,8 @@ impl<T: SingleAttributeParser<S>, S: Stage> AttributeParser<S> for Single<T, S> 
         },
     )];
 
-    fn finalize(self, _cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
-        Some(self.1?.0)
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
+        cx.some(self.1?.0)
     }
 }
 
@@ -333,11 +335,11 @@ impl<T: CombineAttributeParser<S>, S: Stage> AttributeParser<S> for Combine<T, S
         },
     )];
 
-    fn finalize(self, _cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
         if let Some(first_span) = self.first_span {
-            Some(T::CONVERT(self.items, first_span))
+            cx.some(T::CONVERT(self.items, first_span))
         } else {
-            None
+            cx.none()
         }
     }
 }

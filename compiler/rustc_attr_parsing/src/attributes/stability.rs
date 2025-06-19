@@ -11,7 +11,7 @@ use rustc_span::{Ident, Span, Symbol, sym};
 use super::util::parse_version;
 use super::{AcceptMapping, AttributeParser, OnDuplicate};
 use crate::attributes::NoArgsAttributeParser;
-use crate::context::{AcceptContext, FinalizeContext, Stage};
+use crate::context::{AcceptContext, FinalizeContext, FinalizedAttribute, Stage};
 use crate::parser::{ArgParser, MetaItemParser};
 use crate::session_diagnostics::{self, UnsupportedLiteralReason};
 
@@ -87,7 +87,7 @@ impl<S: Stage> AttributeParser<S> for StabilityParser {
         ),
     ];
 
-    fn finalize(mut self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(mut self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
         if let Some(atum) = self.allowed_through_unstable_modules {
             if let Some((
                 Stability {
@@ -117,7 +117,7 @@ impl<S: Stage> AttributeParser<S> for StabilityParser {
 
         let (stability, span) = self.stability?;
 
-        Some(AttributeKind::Stability { stability, span })
+        cx.some(AttributeKind::Stability { stability, span })
     }
 }
 
@@ -142,10 +142,10 @@ impl<S: Stage> AttributeParser<S> for BodyStabilityParser {
         },
     )];
 
-    fn finalize(self, _cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
         let (stability, span) = self.stability?;
 
-        Some(AttributeKind::BodyStability { stability, span })
+        cx.some(AttributeKind::BodyStability { stability, span })
     }
 }
 
@@ -205,7 +205,7 @@ impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
         }),
     ];
 
-    fn finalize(mut self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(mut self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
         if self.promotable {
             if let Some((ref mut stab, _)) = self.stability {
                 stab.promotable = true;
@@ -217,7 +217,7 @@ impl<S: Stage> AttributeParser<S> for ConstStabilityParser {
 
         let (stability, span) = self.stability?;
 
-        Some(AttributeKind::ConstStability { stability, span })
+        cx.some(AttributeKind::ConstStability { stability, span })
     }
 }
 

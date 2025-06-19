@@ -5,7 +5,7 @@ use rustc_feature::{AttributeTemplate, template};
 use rustc_span::{DUMMY_SP, Span, Symbol, sym};
 
 use super::{AcceptMapping, AttributeParser, CombineAttributeParser, ConvertFn, FinalizeContext};
-use crate::context::{AcceptContext, Stage};
+use crate::context::{AcceptContext, FinalizedAttribute, Stage};
 use crate::parser::{ArgParser, MetaItemListParser, MetaItemParser};
 use crate::session_diagnostics;
 use crate::session_diagnostics::IncorrectReprFormatGenericCause;
@@ -317,8 +317,8 @@ impl AlignParser {
 impl<S: Stage> AttributeParser<S> for AlignParser {
     const ATTRIBUTES: AcceptMapping<Self, S> = &[(Self::PATH, Self::TEMPLATE, Self::parse)];
 
-    fn finalize(self, _cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
         let (align, span) = self.0?;
-        Some(AttributeKind::Align { align, span })
+        cx.some(AttributeKind::Align { align, span })
     }
 }

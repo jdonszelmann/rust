@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::ops::{Deref, DerefMut};
+use std::convert::Infallible;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut, FromResidual};
 use std::sync::LazyLock;
 
 use private::Sealed;
@@ -66,7 +68,7 @@ macro_rules! group_type {
     ($stage: ty) => {
          LazyLock<(
             BTreeMap<&'static [Symbol], Vec<(AttributeTemplate, Box<dyn for<'sess, 'a> Fn(&mut AcceptContext<'_, 'sess, $stage>, &ArgParser<'a>) + Send + Sync>)>>,
-            Vec<Box<dyn Send + Sync + Fn(&mut FinalizeContext<'_, '_, $stage>) -> Option<AttributeKind>>>
+            Vec<Box<dyn Send + Sync + Fn(&mut FinalizeContext<'_, '_, $stage>) -> FinalizedAttribute>>
         )>
     };
 }
@@ -97,7 +99,7 @@ macro_rules! attribute_parsers {
     ) => {
         pub(crate) static $name: group_type!($ty) = LazyLock::new(|| {
             let mut accepts = BTreeMap::<_, Vec<(AttributeTemplate, Box<dyn for<'sess, 'a> Fn(&mut AcceptContext<'_, 'sess, $ty>, &ArgParser<'a>) + Send + Sync>)>>::new();
-            let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&mut FinalizeContext<'_, '_, $ty>) -> Option<AttributeKind>>>::new();
+            let mut finalizes = Vec::<Box<dyn Send + Sync + Fn(&mut FinalizeContext<'_, '_, $ty>) -> FinalizedAttribute>>::new();
             $(
                 {
                     thread_local! {
@@ -207,6 +209,32 @@ mod private {
     pub trait Sealed {}
     impl Sealed for super::Early {}
     impl Sealed for super::Late {}
+}
+
+/// Can only be constructed through a [`FinalizeContext`].
+///
+/// Implements `FromResidual` to allow conversions from None.
+/// In other words, in [`AttributeParser::finalize`](crate::attributes::AttributeParser::finalize) you can use the `?` operator.
+///
+/// Note: this is not an Option but a wrapper so it can serve as a proof that target applicability was checked.
+pub(crate) struct FinalizedAttribute {
+    parsed: Option<AttributeKind>,
+}
+
+impl FromResidual<Option<Infallible>> for FinalizedAttribute {
+    fn from_residual(_: Option<Infallible>) -> Self {
+        Self { parsed: None }
+    }
+}
+
+impl<S: Stage> FinalizeContext<'_, '_, S> {
+    pub(crate) fn none(&self) -> FinalizedAttribute {
+        FinalizedAttribute { parsed: None }
+    }
+
+    pub(crate) fn some(&self, attribute: AttributeKind) -> FinalizedAttribute {
+        FinalizedAttribute { parsed: Some(attribute) }
+    }
 }
 
 // allow because it's a sealed trait
@@ -859,7 +887,7 @@ impl<'sess, S: Stage> AttributeParser<'sess, S> {
             if let Some(attr) = f(&mut FinalizeContext {
                 shared: SharedContext { cx: self, target: &target, emit_lint: &mut emit_lint },
                 all_attrs: &attr_paths,
-            }) {
+            }).parsed {
                 parsed_attributes.push(Attribute::Parsed(attr));
             }
         }
