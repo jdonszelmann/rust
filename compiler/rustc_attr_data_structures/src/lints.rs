@@ -19,4 +19,5 @@ pub enum AttributeLintKind {
     UnusedDuplicate { this: Span, other: Span, warning: bool },
     IllFormedAttributeInput { suggestions: Vec<String> },
     Unused { first_span: Span, note: UnusedNote },
+    DuplicateDocAlias { first_definition: Span },
 }

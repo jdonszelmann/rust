@@ -2,6 +2,7 @@ use rustc_abi::Align;
 use rustc_ast::ast::AttrId;
 use rustc_ast::token::CommentKind;
 use rustc_ast::{self as ast, AttrStyle};
+use rustc_data_structures::fx::FxIndexMap;
 use rustc_macros::{Decodable, Encodable, HashStable_Generic, PrintAttribute};
 use rustc_span::hygiene::Transparency;
 use rustc_span::{Ident, Span, Symbol};
@@ -150,6 +151,70 @@ impl Deprecation {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(HashStable_Generic, Encodable, Decodable, PrintAttribute)]
+pub enum DocInline {
+    Inline,
+    NoInline,
+}
+
+#[derive(Clone, Debug, HashStable_Generic, Encodable, Decodable, PrintAttribute)]
+pub struct DocAttribute {
+    pub aliases: FxIndexMap<Symbol, Span>,
+    pub hidden: Option<Span>,
+    pub inline: Option<(DocInline, Span)>,
+
+    // unstable
+    pub cfg: Option<Span>,
+    pub cfg_hide: Option<Span>,
+
+    // builtin
+    pub fake_variadic: Option<Span>,
+    pub keyword: Option<(Symbol, Span)>,
+    pub masked: Option<Span>,
+    pub notable_trait: Option<Span>,
+    pub search_unbox: Option<Span>,
+
+    // valid on crate
+    pub html_favicon_url: Option<(Symbol, Span)>,
+    pub html_logo_url: Option<(Symbol, Span)>,
+    pub html_playground_url: Option<(Symbol, Span)>,
+    pub html_root_url: Option<(Symbol, Span)>,
+    pub html_no_source: Option<Span>,
+    pub issue_tracker_base_url: Option<(Symbol, Span)>,
+    pub rust_logo: Option<Span>,
+
+    // #[doc(test(...))]
+    pub test_attrs: ThinVec<()>,
+    pub no_crate_inject: Option<Span>,
+}
+
+impl Default for DocAttribute {
+    fn default() -> Self {
+        Self {
+            aliases: FxIndexMap::default(),
+            hidden: None,
+            inline: None,
+            cfg: None,
+            cfg_hide: None,
+            fake_variadic: None,
+            keyword: None,
+            masked: None,
+            notable_trait: None,
+            search_unbox: None,
+            html_favicon_url: None,
+            html_logo_url: None,
+            html_playground_url: None,
+            html_root_url: None,
+            html_no_source: None,
+            issue_tracker_base_url: None,
+            rust_logo: None,
+            test_attrs: ThinVec::new(),
+            no_crate_inject: None,
+        }
+    }
+}
+
 /// There are three valid forms of the attribute:
 /// `#[used]`, which is semantically equivalent to `#[used(linker)]` except that the latter is currently unstable.
 /// `#[used(compiler)]`
@@ -160,6 +225,8 @@ pub enum UsedBy {
     Compiler,
     Linker,
 }
+
+
 
 #[derive(Clone, Debug, HashStable_Generic, Encodable, Decodable, PrintAttribute)]
 pub struct LintLevelItem {
@@ -351,7 +418,12 @@ pub enum AttributeKind {
     /// Represents `#[rustc_do_not_implement_via_object]`.
     DoNotImplementViaObject(Span),
 
-    /// Represents [`#[doc]`](https://doc.rust-lang.org/stable/rustdoc/write-documentation/the-doc-attribute.html).
+    /// Represents all other uses of the [`#[doc]`](https://doc.rust-lang.org/stable/rustdoc/write-documentation/the-doc-attribute.html)
+    /// attribute.
+    Doc(Box<DocAttribute>),
+
+    /// Represents specifically [`#[doc = "..."]`](https://doc.rust-lang.org/stable/rustdoc/write-documentation/the-doc-attribute.html).
+    /// i.e. doc comments.
     DocComment { style: AttrStyle, kind: CommentKind, span: Span, comment: Symbol },
 
     /// Represents `#[rustc_dummy]`.

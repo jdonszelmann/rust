@@ -24,6 +24,7 @@ use crate::attributes::codegen_attrs::{
 };
 use crate::attributes::confusables::ConfusablesParser;
 use crate::attributes::deprecation::DeprecationParser;
+use crate::attributes::doc::DocParser;
 use crate::attributes::dummy::DummyParser;
 use crate::attributes::inline::{InlineParser, RustcForceInlineParser};
 use crate::attributes::link_attrs::{
@@ -131,7 +132,7 @@ attribute_parsers!(
         BodyStabilityParser,
         ConfusablesParser,
         ConstStabilityParser,
-        MacroUseParser,
+(??)
         NakedParser,
         LintLevelParser,
         StabilityParser,
@@ -341,7 +342,7 @@ impl<'f, 'sess: 'f, S: Stage> AcceptContext<'f, 'sess, S> {
         &self,
         span: Span,
         found: String,
-        options: &'static [&'static str],
+        options: &[&'static str],
     ) -> ErrorGuaranteed {
         self.emit_err(UnknownMetaItem { span, item: found, expected: options })
     }
