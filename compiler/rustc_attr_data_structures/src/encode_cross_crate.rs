@@ -44,6 +44,7 @@ impl AttributeKind {
             LinkName { .. } => Yes, // Needed for rustdoc
             LinkOrdinal { .. } => No,
             LinkSection { .. } => Yes, // Needed for rustdoc
+            LintLevels(_) => No,
             LoopMatch(..) => No,
             MacroEscape(..) => No,
             MacroTransparency(..) => Yes,

@@ -1,4 +1,5 @@
 use rustc_abi::Align;
+use rustc_ast::ast::AttrId;
 use rustc_ast::token::CommentKind;
 use rustc_ast::{self as ast, AttrStyle};
 use rustc_macros::{Decodable, Encodable, HashStable_Generic, PrintAttribute};
@@ -6,7 +7,10 @@ use rustc_span::hygiene::Transparency;
 use rustc_span::{Ident, Span, Symbol};
 use thin_vec::ThinVec;
 
-use crate::{DefaultBodyStability, PartialConstStability, PrintAttribute, RustcVersion, Stability};
+use crate::path::BorrowedAttrPath;
+use crate::{
+    AttrPath, DefaultBodyStability, PartialConstStability, PrintAttribute, RustcVersion, Stability,
+};
 
 #[derive(Copy, Clone, PartialEq, Encodable, Decodable, Debug, HashStable_Generic, PrintAttribute)]
 pub enum InlineAttr {
@@ -157,6 +161,36 @@ pub enum UsedBy {
     Linker,
 }
 
+#[derive(Clone, Debug, HashStable_Generic, Encodable, Decodable, PrintAttribute)]
+pub struct LintLevelItem {
+    pub lint_name: AttrPath,
+    pub reason: Option<Symbol>,
+    pub span: Span,
+}
+
+impl LintLevelItem {
+    // returns an Optional tool name, followed by the lint name
+    pub fn split_tool<'a>(&'a self) -> (Option<&'a Ident>, BorrowedAttrPath<'a>) {
+        if self.lint_name.segments.len() > 1 {
+            (
+                Some(&self.lint_name.segments[0]),
+                BorrowedAttrPath { segments: &self.lint_name.segments[1..] },
+            )
+        } else {
+            (None, BorrowedAttrPath { segments: &self.lint_name.segments[..] })
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, HashStable_Generic, Encodable, Decodable, PrintAttribute)]
+pub struct LintLevels {
+    pub allowed: ThinVec<LintLevelItem>,
+    pub expected: ThinVec<(LintLevelItem, LintExpectationId)>,
+    pub warned: ThinVec<LintLevelItem>,
+    pub denied: ThinVec<LintLevelItem>,
+    pub forbidden: ThinVec<LintLevelItem>,
+}
+
 #[derive(Encodable, Decodable, Clone, Debug, PartialEq, Eq, Hash)]
 #[derive(HashStable_Generic, PrintAttribute)]
 pub enum MacroUseArgs {
@@ -193,6 +227,7 @@ pub enum CfgEntry {
     NameValue { name: Symbol, name_span: Span, value: Option<(Symbol, Span)>, span: Span },
     Version(Option<RustcVersion>, Span),
 }
+
 
 /// Represents parsed *built-in* inert attributes.
 ///
@@ -360,6 +395,10 @@ pub enum AttributeKind {
 
     /// Represents [`#[link_section]`](https://doc.rust-lang.org/reference/abi.html#the-link_section-attribute)
     LinkSection { name: Symbol, span: Span },
+
+    /// Represents [diagnostics attributes](https://doc.rust-lang.org/stable/reference/attributes/diagnostics.html):
+    /// `#[allow(...)]`, `#[expect(...)]`, `#[warn(...)]`, `#[deny(...)]` and `#[forbid(...)]`
+    LintLevels(LintLevels),
 
     /// Represents `#[loop_match]`.
     LoopMatch(Span),

@@ -8,6 +8,7 @@ use std::slice;
 
 use rustc_ast::BindingMode;
 use rustc_ast::util::parser::ExprPrecedence;
+use rustc_attr_data_structures::AttrPath;
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_data_structures::sync;
 use rustc_data_structures::unord::UnordMap;
@@ -328,7 +329,7 @@ impl LintStore {
     /// printing duplicate warnings.
     pub fn check_lint_name(
         &self,
-        lint_name: &str,
+        lint_name: &AttrPath,
         tool_name: Option<Symbol>,
         registered_tools: &RegisteredTools,
     ) -> CheckLintNameResult<'_> {

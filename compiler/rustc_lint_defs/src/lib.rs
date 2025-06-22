@@ -1,6 +1,5 @@
 use rustc_abi::ExternAbi;
 use rustc_ast::AttrId;
-use rustc_ast::attr::AttributeExt;
 use rustc_ast::node_id::NodeId;
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_data_structures::stable_hasher::{
@@ -157,35 +156,6 @@ impl Level {
             "deny" => Some(Level::Deny),
             "forbid" => Some(Level::Forbid),
             "expect" | _ => None,
-        }
-    }
-
-    /// Converts an `Attribute` to a level.
-    pub fn from_attr(attr: &impl AttributeExt) -> Option<(Self, Option<LintExpectationId>)> {
-        attr.name().and_then(|name| Self::from_symbol(name, || Some(attr.id())))
-    }
-
-    /// Converts a `Symbol` to a level.
-    pub fn from_symbol(
-        s: Symbol,
-        id: impl FnOnce() -> Option<AttrId>,
-    ) -> Option<(Self, Option<LintExpectationId>)> {
-        match s {
-            sym::allow => Some((Level::Allow, None)),
-            sym::expect => {
-                if let Some(attr_id) = id() {
-                    Some((
-                        Level::Expect,
-                        Some(LintExpectationId::Unstable { attr_id, lint_index: None }),
-                    ))
-                } else {
-                    None
-                }
-            }
-            sym::warn => Some((Level::Warn, None)),
-            sym::deny => Some((Level::Deny, None)),
-            sym::forbid => Some((Level::Forbid, None)),
-            _ => None,
         }
     }
 

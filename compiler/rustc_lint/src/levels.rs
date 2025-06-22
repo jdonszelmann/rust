@@ -1,5 +1,6 @@
-use rustc_ast::attr::AttributeExt;
 use rustc_ast_pretty::pprust;
+use rustc_attr_data_structures::{AttributeKind, LintLevels};
+use rustc_attr_parsing::AttributeParser;
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_data_structures::unord::UnordSet;
 use rustc_errors::{Diag, LintDiagnostic, MultiSpan};
@@ -390,7 +391,8 @@ impl<'s> LintLevelsBuilder<'s, TopDown> {
         crate_attrs: &[ast::Attribute],
     ) -> Self {
         let mut builder = Self::new(sess, features, lint_added_lints, store, registered_tools);
-        builder.add(crate_attrs, true, None);
+        let parsed_attrs = AttributeParser::parse_for_early_lints(sess, crate_attrs);
+        builder.add(&parsed_attrs, true, None);
         builder
     }
 
@@ -427,7 +429,8 @@ impl<'s> LintLevelsBuilder<'s, TopDown> {
         self.provider.cur =
             self.provider.sets.list.push(LintSet { specs: FxIndexMap::default(), parent: prev });
 
-        self.add(attrs, is_crate_node, source_hir_id);
+        let parsed_attrs = AttributeParser::parse_for_early_lints(self.sess(), attrs);
+        self.add(&parsed_attrs, is_crate_node, source_hir_id);
 
         if self.provider.current_specs().is_empty() {
             self.provider.sets.list.pop();
@@ -636,12 +639,20 @@ impl<'s, P: LintLevelsProvider> LintLevelsBuilder<'s, P> {
         };
     }
 
-    fn add(
+    fn add_lint(
         &mut self,
-        attrs: &[impl AttributeExt],
+        lint_levels: &LintLevels,
         is_crate_node: bool,
         source_hir_id: Option<HirId>,
     ) {
+        let LintLevels { allowed, expected, warned, denied, forbidden } = lint_levels;
+
+        for lint in allowed {
+            self.store.check_lint_name(lint_name, tool_name, registered_tools)
+        }
+    }
+
+    fn add(&mut self, attrs: &[hir::Attribute], is_crate_node: bool, source_hir_id: Option<HirId>) {
         let sess = self.sess;
         for (attr_index, attr) in attrs.iter().enumerate() {
             if attr.is_automatically_derived_attr() {
@@ -673,70 +684,74 @@ impl<'s, P: LintLevelsProvider> LintLevelsBuilder<'s, P> {
                 continue;
             }
 
-            let (level, lint_id) = match Level::from_attr(attr) {
-                None => continue,
-                // This is the only lint level with a `LintExpectationId` that can be created from
-                // an attribute.
-                Some((Level::Expect, Some(unstable_id))) if let Some(hir_id) = source_hir_id => {
-                    let LintExpectationId::Unstable { lint_index: None, attr_id: _ } = unstable_id
-                    else {
-                        bug!("stable id Level::from_attr")
-                    };
-
-                    let stable_id = LintExpectationId::Stable {
-                        hir_id,
-                        attr_index: attr_index.try_into().unwrap(),
-                        lint_index: None,
-                    };
-
-                    (Level::Expect, Some(stable_id))
-                }
-                Some((lvl, id)) => (lvl, id),
-            };
-
-            let Some(mut metas) = attr.meta_item_list() else { continue };
-
-            // Check whether `metas` is empty, and get its last element.
-            let Some(tail_li) = metas.last() else {
-                // This emits the unused_attributes lint for `#[level()]`
-                continue;
-            };
-
-            // Before processing the lint names, look for a reason (RFC 2383)
-            // at the end.
-            let mut reason = None;
-            if let Some(item) = tail_li.meta_item() {
-                match item.kind {
-                    ast::MetaItemKind::Word => {} // actual lint names handled later
-                    ast::MetaItemKind::NameValue(ref name_value) => {
-                        if item.path == sym::reason {
-                            if let ast::LitKind::Str(rationale, _) = name_value.kind {
-                                reason = Some(rationale);
-                            } else {
-                                sess.dcx().emit_err(MalformedAttribute {
-                                    span: name_value.span,
-                                    sub: MalformedAttributeSub::ReasonMustBeStringLiteral(
-                                        name_value.span,
-                                    ),
-                                });
-                            }
-                            // found reason, reslice meta list to exclude it
-                            metas.pop().unwrap();
-                        } else {
-                            sess.dcx().emit_err(MalformedAttribute {
-                                span: item.span,
-                                sub: MalformedAttributeSub::BadAttributeArgument(item.span),
-                            });
-                        }
-                    }
-                    ast::MetaItemKind::List(_) => {
-                        sess.dcx().emit_err(MalformedAttribute {
-                            span: item.span,
-                            sub: MalformedAttributeSub::BadAttributeArgument(item.span),
-                        });
-                    }
-                }
+            if let AttributeKind::LintLevels(lint_levels) = attr {
+                self.add_lint(lint_levels, is_crate_node, source_hir_id);
             }
+
+            // let (level, lint_id) = match Level::from_attr(attr) {
+            //     None => continue,
+            //     // This is the only lint level with a `LintExpectationId` that can be created from
+            //     // an attribute.
+            //     Some((Level::Expect, Some(unstable_id))) if let Some(hir_id) = source_hir_id => {
+            //         let LintExpectationId::Unstable { lint_index: None, attr_id: _ } = unstable_id
+            //         else {
+            //             bug!("stable id Level::from_attr")
+            //         };
+
+            //         let stable_id = LintExpectationId::Stable {
+            //             hir_id,
+            //             attr_index: attr_index.try_into().unwrap(),
+            //             lint_index: None,
+            //         };
+
+            //         (Level::Expect, Some(stable_id))
+            //     }
+            //     Some((lvl, id)) => (lvl, id),
+            // };
+
+            // let Some(mut metas) = attr.meta_item_list() else { continue };
+
+            // // Check whether `metas` is empty, and get its last element.
+            // let Some(tail_li) = metas.last() else {
+            //     // This emits the unused_attributes lint for `#[level()]`
+            //     continue;
+            // };
+
+            // // Before processing the lint names, look for a reason (RFC 2383)
+            // // at the end.
+            // let mut reason = None;
+            // if let Some(item) = tail_li.meta_item() {
+            //     match item.kind {
+            //         ast::MetaItemKind::Word => {} // actual lint names handled later
+            //         ast::MetaItemKind::NameValue(ref name_value) => {
+            //             if item.path == sym::reason {
+            //                 if let ast::LitKind::Str(rationale, _) = name_value.kind {
+            //                     reason = Some(rationale);
+            //                 } else {
+            //                     sess.dcx().emit_err(MalformedAttribute {
+            //                         span: name_value.span,
+            //                         sub: MalformedAttributeSub::ReasonMustBeStringLiteral(
+            //                             name_value.span,
+            //                         ),
+            //                     });
+            //                 }
+            //                 // found reason, reslice meta list to exclude it
+            //                 metas.pop().unwrap();
+            //             } else {
+            //                 sess.dcx().emit_err(MalformedAttribute {
+            //                     span: item.span,
+            //                     sub: MalformedAttributeSub::BadAttributeArgument(item.span),
+            //                 });
+            //             }
+            //         }
+            //         ast::MetaItemKind::List(_) => {
+            //             sess.dcx().emit_err(MalformedAttribute {
+            //                 span: item.span,
+            //                 sub: MalformedAttributeSub::BadAttributeArgument(item.span),
+            //             });
+            //         }
+            //     }
+            // }
 
             for (lint_index, li) in metas.iter_mut().enumerate() {
                 let mut lint_id = lint_id;

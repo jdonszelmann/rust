@@ -171,8 +171,8 @@ macro_rules! print_tup {
 }
 
 print_tup!(A B C D E F G H);
-print_skip!(Span, (), ErrorGuaranteed);
-print_disp!(u16, bool, NonZero<u32>);
+print_skip!(Span, (), LintExpectationId);
+print_disp!(u16, bool, NonZero<u32>, AttrPath);
 print_debug!(Symbol, Ident, UintTy, IntTy, Align, AttrStyle, CommentKind, Transparency);
 
 /// Finds attributes in sequences of attributes by pattern matching.

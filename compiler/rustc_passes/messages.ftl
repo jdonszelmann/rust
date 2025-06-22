@@ -534,6 +534,10 @@ passes_no_mangle =
     .warn = {-passes_previously_accepted}
     .label = not a free function, impl method or static
 
+passes_align_on_fields =
+    attribute should be applied to a function or method
+    .warn = {-passes_previously_accepted}
+
 passes_no_mangle_foreign =
     `#[no_mangle]` has no effect on a foreign {$foreign_item_kind}
     .warn = {-passes_previously_accepted}

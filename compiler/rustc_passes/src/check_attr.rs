@@ -238,7 +238,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     self.check_export_name(hir_id, *attr_span, span, target)
                 }
                 Attribute::Parsed(AttributeKind::Align { align, span: attr_span }) => {
-                    self.check_align(span, hir_id, target, *align, *attr_span)
+(??)                    self.check_align(span, target, *align, *repr_span)
                 }
                 Attribute::Parsed(AttributeKind::LinkSection { span: attr_span, .. }) => {
                     self.check_link_section(hir_id, *attr_span, span, target)
@@ -289,6 +289,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     AttributeKind::BodyStability { .. }
                     | AttributeKind::ConstStabilityIndirect
                     | AttributeKind::MacroTransparency(_)
+                    | AttributeKind::LintLevels(_),
                     | AttributeKind::Pointee(..)
                     | AttributeKind::Dummy
                     | AttributeKind::RustcBuiltinMacro { .. }
@@ -399,12 +400,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                         [sym::linkage, ..] => self.check_linkage(attr, span, target),
                         [
                             // ok
-                            sym::allow
-                            | sym::expect
-                            | sym::warn
-                            | sym::deny
-                            | sym::forbid
-                            | sym::cfg
+                            sym::cfg
                             | sym::cfg_attr
                             | sym::cfg_trace
                             | sym::cfg_attr_trace
@@ -1980,15 +1976,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     }
 
     /// Checks if the `#[align]` attributes on `item` are valid.
-    // FIXME(#82232, #143834): temporarily renamed to mitigate `#[align]` nameres ambiguity
-    fn check_align(
-        &self,
-        span: Span,
-        hir_id: HirId,
-        target: Target,
-        align: Align,
-        attr_span: Span,
-    ) {
+(??)    fn check_align(&self, span: Span, target: Target, align: Align, repr_span: Span) {
         match target {
             Target::Fn | Target::Method(_) | Target::ForeignFn => {}
             Target::Field => {
@@ -1996,7 +1984,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     UNUSED_ATTRIBUTES,
                     hir_id,
                     attr_span,
-                    AlignOnFields { span },
+(??)
                 );
             }
             Target::Struct | Target::Union | Target::Enum => {
@@ -2479,25 +2467,18 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
 
     fn check_unused_attribute(&self, hir_id: HirId, attr: &Attribute, style: Option<AttrStyle>) {
         // Warn on useless empty attributes.
-        // FIXME(jdonszelmann): this lint should be moved to attribute parsing, see `AcceptContext::warn_empty_attribute`
-        let note = if attr.has_any_name(&[
-            sym::allow,
-            sym::expect,
-            sym::warn,
-            sym::deny,
-            sym::forbid,
-            sym::feature,
-        ]) && attr.meta_item_list().is_some_and(|list| list.is_empty())
+(??)        // FIXME(jdonszelmann): this lint should be moved to attribute parsing, see `AcceptContext::warn_empty_attribute`
+(??)        let note = if attr.has_any_name(&[
+(??)            sym::macro_use,
+(??)            sym::allow,
+(??)            sym::expect,
+(??)            sym::warn,
+(??)            sym::deny,
+(??)            sym::forbid,
+(??)            sym::feature,
+(??)        ]) && attr.meta_item_list().is_some_and(|list| list.is_empty())
         {
             errors::UnusedNote::EmptyList { name: attr.name().unwrap() }
-        } else if attr.has_any_name(&[sym::allow, sym::warn, sym::deny, sym::forbid, sym::expect])
-            && let Some(meta) = attr.meta_item_list()
-            && let [meta] = meta.as_slice()
-            && let Some(item) = meta.meta_item()
-            && let MetaItemKind::NameValue(_) = &item.kind
-            && item.path == sym::reason
-        {
-            errors::UnusedNote::NoLints { name: attr.name().unwrap() }
         } else if attr.has_any_name(&[sym::allow, sym::warn, sym::deny, sym::forbid, sym::expect])
             && let Some(meta) = attr.meta_item_list()
             && meta.iter().any(|meta| {

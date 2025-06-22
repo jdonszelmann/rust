@@ -1,4 +1,6 @@
-use rustc_attr_data_structures::lints::{AttributeLint, AttributeLintKind};
+use rustc_attr_data_structures::lints::{
+    AttributeLint, AttributeLintKind, UnusedNote as LintUnusedNote,
+};
 use rustc_errors::{DiagArgValue, LintEmitter};
 use rustc_hir::HirId;
 
@@ -25,6 +27,20 @@ pub fn emit_attribute_lint<L: LintEmitter>(lint: &AttributeLint<HirId>, lint_emi
                     suggestions: DiagArgValue::StrListSepByAnd(
                         suggestions.into_iter().map(|s| format!("`{s}`").into()).collect(),
                     ),
+                },
+            );
+        }
+        AttributeLintKind::Unused { attr_span, note } => {
+            lint_emitter.emit_node_span_lint(
+                rustc_session::lint::builtin::UNUSED_ATTRIBUTES,
+                *id,
+                *span,
+                session_diagnostics::Unused {
+                    attr_span: *attr_span,
+                    note: match *note {
+                        LintUnusedNote::EmptyList { name } => UnusedNote::EmptyList { name },
+                        LintUnusedNote::NoLints { name } => UnusedNote::NoLints { name },
+                    },
                 },
             );
         }

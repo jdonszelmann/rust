@@ -4,9 +4,10 @@ use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
 
 use private::Sealed;
-use rustc_ast::{self as ast, LitKind, MetaItemLit, NodeId};
+use rustc_ast::{self as ast, LitKind, DUMMY_NODE_ID, MetaItemLit, NodeId};
 use rustc_attr_data_structures::lints::{AttributeLint, AttributeLintKind};
 use rustc_attr_data_structures::{AttrPath, AttributeKind};
+use rustc_data_structures::fx::FxHashSet;
 use rustc_errors::{DiagCtxtHandle, Diagnostic};
 use rustc_feature::{AttributeTemplate, Features};
 use rustc_hir::{AttrArgs, AttrItem, Attribute, HashIgnoredAttrId, HirId};
@@ -27,7 +28,7 @@ use crate::attributes::dummy::DummyParser;
 use crate::attributes::inline::{InlineParser, RustcForceInlineParser};
 use crate::attributes::link_attrs::{
     ExportStableParser, FfiConstParser, FfiPureParser, LinkNameParser, LinkOrdinalParser,
-    LinkSectionParser, StdInternalSymbolParser,
+    LinkSectionParser, StdInternalSymbolParser, LintLevelParser
 };
 use crate::attributes::lint_helpers::{
     AsPtrParser, AutomaticallyDerivedParser, PassByValueParser, PubTransparentParser,
@@ -132,6 +133,7 @@ attribute_parsers!(
         ConstStabilityParser,
         MacroUseParser,
         NakedParser,
+        LintLevelParser,
         StabilityParser,
         UsedParser,
         // tidy-alphabetical-end
@@ -628,10 +630,10 @@ pub struct AttributeParser<'sess, S: Stage = Late> {
     sess: &'sess Session,
     stage: S,
 
-    /// *Only* parse attributes with this symbol.
+    /// *Only* parse attributes with these symbols.
     ///
-    /// Used in cases where we want the lowering infrastructure for parse just a single attribute.
-    parse_only: Option<Symbol>,
+    /// Used in cases where we want the lowering infrastructure for parse just a single or a couple of attributes.
+    parse_only: FxHashSet<Symbol>,
 }
 
 impl<'sess> AttributeParser<'sess, Early> {
@@ -660,10 +662,13 @@ impl<'sess> AttributeParser<'sess, Early> {
         let mut p = Self {
             features,
             tools: Vec::new(),
-            parse_only: Some(sym),
+            parse_only: FxHashSet::default(),
             sess,
             stage: Early { emit_errors: ShouldEmit::Nothing },
         };
+
+        p.parse_only.insert(sym);
+
         let mut parsed = p.parse_attribute_list(
             attrs,
             target_span,
@@ -677,6 +682,39 @@ impl<'sess> AttributeParser<'sess, Early> {
         assert!(parsed.len() <= 1);
 
         parsed.pop()
+    }
+
+    /// Parse attributes specifically for early lints.
+    ///
+    /// Do not use for other purposes.
+    pub fn parse_for_early_lints(sess: &'sess Session, attrs: &[ast::Attribute]) -> Vec<Attribute> {
+        let mut p = Self {
+            features: None,
+            tools: Vec::new(),
+            parse_only: FxHashSet::default(),
+            sess,
+            stage: PhantomData,
+        };
+
+        p.parse_only.insert(rustc_span::sym::doc);
+        p.parse_only.insert(rustc_span::sym::allow);
+        p.parse_only.insert(rustc_span::sym::expect);
+        p.parse_only.insert(rustc_span::sym::warn);
+        p.parse_only.insert(rustc_span::sym::deny);
+        p.parse_only.insert(rustc_span::sym::forbid);
+
+        let parsed = p.parse_attribute_list(
+            attrs,
+            DUMMY_SP,
+            DUMMY_NODE_ID,
+            OmitDoc::Lower,
+            std::convert::identity,
+            |_lint| {
+                panic!("can't emit lints here for now (nothing uses this atm)");
+            },
+        );
+
+        parsed
     }
 
     pub fn parse_single<T>(
@@ -721,12 +759,18 @@ impl<'sess> AttributeParser<'sess, Early> {
 
 impl<'sess, S: Stage> AttributeParser<'sess, S> {
     pub fn new(
-        sess: &'sess Session,
-        features: &'sess Features,
+        sess: &'sess Session, 
+        features: &'sess Features, 
         tools: Vec<Symbol>,
         stage: S,
     ) -> Self {
-        Self { features: Some(features), tools, parse_only: None, sess, stage }
+        Self {
+            features: Some(features),
+            tools,
+            parse_only: FxHashSet::default(),
+            sess,
+            stage: PhantomData,
+        }
     }
 
     pub(crate) fn sess(&self) -> &'sess Session {
@@ -763,11 +807,14 @@ impl<'sess, S: Stage> AttributeParser<'sess, S> {
         let mut attr_paths = Vec::new();
 
         for attr in attrs {
-            // If we're only looking for a single attribute, skip all the ones we don't care about.
-            if let Some(expected) = self.parse_only {
-                if !attr.has_name(expected) {
-                    continue;
-                }
+            // if we're supposed to only parse specific arguments
+            if !self.parse_only.is_empty()
+                // get the name
+                && let Some(name) = attr.name()
+                // check if it's in the set, if not continue, skipping the ones we do not care about.
+                && !self.parse_only.contains(&name)
+            {
+                continue;
             }
 
             // Sometimes, for example for `#![doc = include_str!("readme.md")]`,
