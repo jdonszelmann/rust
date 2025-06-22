@@ -21,7 +21,7 @@ use rustc_ast::tokenstream::{TokenStream, TokenTree};
 use rustc_ast::visit::{FnCtxt, FnKind};
 use rustc_ast::{self as ast, *};
 use rustc_ast_pretty::pprust::expr_to_string;
-use rustc_attr_data_structures::{AttributeKind, find_attr};
+use rustc_attr_data_structures::{AttributeKind, find_attr, DocAttribute};
 use rustc_errors::{Applicability, LintDiagnostic};
 use rustc_feature::GateIssue;
 use rustc_hir as hir;
@@ -381,24 +381,14 @@ pub struct MissingDoc;
 impl_lint_pass!(MissingDoc => [MISSING_DOCS]);
 
 fn has_doc(attr: &hir::Attribute) -> bool {
-    if attr.is_doc_comment() {
+    if matches!(attr, hir::Attribute::Parsed(AttributeKind::DocComment { .. })) {
         return true;
     }
 
-    if !attr.has_name(sym::doc) {
-        return false;
-    }
-
-    if attr.value_str().is_some() {
+    if let hir::Attribute::Parsed(AttributeKind::Doc(d)) = attr
+        && matches!(d.as_ref(), DocAttribute { hidden: Some(..), .. })
+    {
         return true;
-    }
-
-    if let Some(list) = attr.meta_item_list() {
-        for meta in list {
-            if meta.has_name(sym::hidden) {
-                return true;
-            }
-        }
     }
 
     false
