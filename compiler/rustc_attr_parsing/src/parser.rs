@@ -10,8 +10,8 @@ use rustc_ast::token::{self, Delimiter, Token};
 use rustc_ast::tokenstream::{TokenStreamIter, TokenTree};
 use rustc_ast::{AttrArgs, DelimArgs, Expr, ExprKind, LitKind, MetaItemLit, NormalAttr, Path};
 use rustc_ast_pretty::pprust;
+use rustc_attr_data_structures::AttrPath;
 use rustc_errors::DiagCtxtHandle;
-use rustc_hir::{self as hir, AttrPath};
 use rustc_span::{ErrorGuaranteed, Ident, Span, Symbol, kw, sym};
 
 pub struct SegmentIterator<'a> {
@@ -44,7 +44,7 @@ pub enum PathParser<'a> {
 }
 
 impl<'a> PathParser<'a> {
-    pub fn get_attribute_path(&self) -> hir::AttrPath {
+    pub fn get_attribute_path(&self) -> AttrPath {
         AttrPath {
             segments: self.segments().copied().collect::<Vec<_>>().into_boxed_slice(),
             span: self.span(),

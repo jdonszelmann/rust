@@ -1,12 +1,12 @@
 use std::num::IntErrorKind;
 
 use rustc_ast as ast;
+use rustc_attr_data_structures::AttrPath;
 use rustc_errors::codes::*;
 use rustc_errors::{
     Applicability, Diag, DiagArgValue, DiagCtxtHandle, Diagnostic, EmissionGuarantee, Level,
 };
 use rustc_feature::AttributeTemplate;
-use rustc_hir::AttrPath;
 use rustc_macros::{Diagnostic, LintDiagnostic, Subdiagnostic};
 use rustc_span::{Span, Symbol};
 

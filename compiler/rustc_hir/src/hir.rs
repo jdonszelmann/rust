@@ -14,7 +14,7 @@ pub use rustc_ast::{
     BoundConstness, BoundPolarity, ByRef, CaptureBy, DelimArgs, ImplPolarity, IsAuto,
     MetaItemInner, MetaItemLit, Movability, Mutability, UnOp,
 };
-use rustc_attr_data_structures::AttributeKind;
+use rustc_attr_data_structures::{AttrPath, AttributeKind};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::sorted_map::SortedMap;
 use rustc_data_structures::tagged_ptr::TaggedRef;
