@@ -61,8 +61,8 @@ pub use rustc_error_messages::{
 };
 use rustc_hashes::Hash128;
 use rustc_hir::HirId;
+use rustc_lint_defs::Lint;
 pub use rustc_lint_defs::{Applicability, listify, pluralize};
-use rustc_lint_defs::{Lint, LintExpectationId};
 use rustc_macros::{Decodable, Encodable};
 pub use rustc_span::ErrorGuaranteed;
 pub use rustc_span::fatal_error::{FatalError, FatalErrorMarker};

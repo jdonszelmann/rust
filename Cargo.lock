@@ -3690,6 +3690,7 @@ dependencies = [
  "rustc_hir",
  "rustc_index",
  "rustc_lexer",
+ "rustc_lint_data_structures",
  "rustc_lint_defs",
  "rustc_macros",
  "rustc_serialize",
@@ -4009,6 +4010,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_lint_data_structures"
+version = "0.0.0"
+dependencies = [
+ "rustc_abi",
+ "rustc_ast",
+ "rustc_data_structures",
+ "rustc_error_messages",
+ "rustc_macros",
+ "rustc_serialize",
+ "rustc_span",
+ "serde",
+]
+
+[[package]]
 name = "rustc_lint_defs"
 version = "0.0.0"
 dependencies = [
@@ -4017,6 +4032,7 @@ dependencies = [
  "rustc_data_structures",
  "rustc_error_messages",
  "rustc_hir",
+ "rustc_lint_data_structures",
  "rustc_macros",
  "rustc_serialize",
  "rustc_span",
