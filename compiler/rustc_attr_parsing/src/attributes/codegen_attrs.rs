@@ -7,7 +7,7 @@ use super::{
     AcceptMapping, AttributeOrder, AttributeParser, CombineAttributeParser, ConvertFn,
     NoArgsAttributeParser, OnDuplicate, SingleAttributeParser,
 };
-use crate::context::{AcceptContext, FinalizeContext, Stage};
+use crate::context::{AcceptContext, FinalizeContext, FinalizedAttribute, Stage};
 use crate::parser::ArgParser;
 use crate::session_diagnostics::{NakedFunctionIncompatibleAttribute, NullOnExport};
 
@@ -139,7 +139,7 @@ impl<S: Stage> AttributeParser<S> for NakedParser {
             }
         })];
 
-    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> Option<AttributeKind> {
+    fn finalize(self, cx: &FinalizeContext<'_, '_, S>) -> FinalizedAttribute {
         // FIXME(jdonszelmann): upgrade this list to *parsed* attributes
         // once all of these have parsed forms. That'd make the check much nicer...
         //
@@ -185,7 +185,9 @@ impl<S: Stage> AttributeParser<S> for NakedParser {
             sym::doc,
         ];
 
-        let span = self.span?;
+        let Some(span) = self.span else {
+            return cx.none();
+        };
 
         // only if we found a naked attribute do we do the somewhat expensive check
         'outer: for other_attr in cx.all_attrs {
@@ -222,7 +224,7 @@ impl<S: Stage> AttributeParser<S> for NakedParser {
             });
         }
 
-        Some(AttributeKind::Naked(span))
+        cx.some(AttributeKind::Naked(span))
     }
 }
 

@@ -159,5 +159,13 @@ attr_parsing_unused_multiple =
     .suggestion = remove this attribute
     .note = attribute also specified here
 
+attr_parsing_generic_wrong_target =
+    attribute is not valid here
+    .label = cannot be applied to {$target}
+    .help = {$num_ok_targets ->
+        [1] this attribute is only valid on {$ok_targets}
+        *[other] this attribute is valid on {$ok_targets}
+    }
+
 -attr_parsing_previously_accepted =
     this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!

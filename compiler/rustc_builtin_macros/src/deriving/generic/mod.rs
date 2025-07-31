@@ -188,9 +188,9 @@ use rustc_ast::{
     GenericParamKind, Generics, Mutability, PatKind, Safety, VariantData,
 };
 use rustc_attr_data_structures::{AttributeKind, ReprPacked};
-use rustc_attr_parsing::AttributeParser;
+use rustc_attr_parsing::{AttributeParser, AttributeTarget};
 use rustc_expand::base::{Annotatable, ExtCtxt};
-use rustc_hir::Attribute;
+use rustc_hir::{Attribute, Target};
 use rustc_span::{DUMMY_SP, Ident, Span, Symbol, kw, sym};
 use thin_vec::{ThinVec, thin_vec};
 use ty::{Bounds, Path, Ref, Self_, Ty};
@@ -488,8 +488,12 @@ impl<'a> TraitDef<'a> {
         match item {
             Annotatable::Item(item) => {
                 let is_packed = matches!(
-                    AttributeParser::parse_limited(cx.sess, &item.attrs, sym::repr, item.span, item.id, None),
-                    Some(Attribute::Parsed(AttributeKind::Repr { reprs, .. })) if reprs.iter().any(|(x, _)| matches!(x, ReprPacked(..)))
+                    AttributeParser::parse_limited(cx.sess, &item.attrs, sym::repr, AttributeTarget {
+                        span: item.span,
+                        id: item.id,
+                        kind: Target::from_ast_item(item),
+                    }),
+                    Some(Attribute::Parsed(AttributeKind::Repr {reprs, ..})) if reprs.iter().any(|(x, _)| matches!(x, ReprPacked(..)))
                 );
 
                 let newitem = match &item.kind {

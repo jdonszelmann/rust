@@ -6,6 +6,8 @@
 
 use std::fmt::{self, Display};
 
+use rustc_ast as ast;
+
 use crate::def::DefKind;
 use crate::{Item, ItemKind, TraitItem, TraitItemKind, hir};
 
@@ -41,7 +43,9 @@ pub enum Target {
     Union,
     Trait,
     TraitAlias,
-    Impl { of_trait: bool },
+    Impl {
+        of_trait: bool,
+    },
     Expression,
     Statement,
     Arm,
@@ -51,12 +55,19 @@ pub enum Target {
     ForeignFn,
     ForeignStatic,
     ForeignTy,
-    GenericParam { kind: GenericParamKind, has_default: bool },
+    GenericParam {
+        kind: GenericParamKind,
+        has_default: bool,
+    },
     MacroDef,
     Param,
     PatField,
     ExprField,
     WherePredicate,
+
+    /// Applying things to macro calls should always be an error.
+    ErrorMacroCall,
+    Crate,
 }
 
 impl Display for Target {
@@ -98,7 +109,9 @@ impl Target {
             | Target::Param
             | Target::PatField
             | Target::ExprField
-            | Target::WherePredicate => false,
+            | Target::WherePredicate
+            | Target::ErrorMacroCall
+            | Target::Crate => false,
         }
     }
 
@@ -120,6 +133,30 @@ impl Target {
             ItemKind::Trait(..) => Target::Trait,
             ItemKind::TraitAlias(..) => Target::TraitAlias,
             ItemKind::Impl(imp_) => Target::Impl { of_trait: imp_.of_trait.is_some() },
+        }
+    }
+
+    pub fn from_ast_item(item: &ast::Item) -> Target {
+        match item.kind {
+            ast::ItemKind::ExternCrate(..) => Target::ExternCrate,
+            ast::ItemKind::Use(..) => Target::Use,
+            ast::ItemKind::Static { .. } => Target::Static,
+            ast::ItemKind::Const(..) => Target::Const,
+            ast::ItemKind::Fn { .. } => Target::Fn,
+            ast::ItemKind::Mod(..) => Target::Mod,
+            ast::ItemKind::ForeignMod { .. } => Target::ForeignMod,
+            ast::ItemKind::GlobalAsm { .. } => Target::GlobalAsm,
+            ast::ItemKind::TyAlias(..) => Target::TyAlias,
+            ast::ItemKind::Enum(..) => Target::Enum,
+            ast::ItemKind::Struct(..) => Target::Struct,
+            ast::ItemKind::Union(..) => Target::Union,
+            ast::ItemKind::Trait(..) => Target::Trait,
+            ast::ItemKind::TraitAlias(..) => Target::TraitAlias,
+            ast::ItemKind::Impl(ref i) => Target::Impl { of_trait: i.of_trait.is_some() },
+            ast::ItemKind::MacCall(..) => Target::ErrorMacroCall,
+            ast::ItemKind::MacroDef(..) => Target::MacroDef,
+            ast::ItemKind::Delegation(..) => Target::Fn,
+            ast::ItemKind::DelegationMac(..) => panic!("macros should be expanded"),
         }
     }
 
@@ -167,8 +204,8 @@ impl Target {
         }
     }
 
-    pub fn from_generic_param(generic_param: &hir::GenericParam<'_>) -> Target {
-        match generic_param.kind {
+    pub fn from_generic_param_kind(generic_param_kind: &hir::GenericParamKind<'_>) -> Target {
+        match generic_param_kind {
             hir::GenericParamKind::Type { default, .. } => Target::GenericParam {
                 kind: GenericParamKind::Type,
                 has_default: default.is_some(),
@@ -227,6 +264,8 @@ impl Target {
             Target::PatField => "pattern field",
             Target::ExprField => "struct field",
             Target::WherePredicate => "where predicate",
+            Target::ErrorMacroCall => "macro call",
+            Target::Crate => "crate root",
         }
     }
 }

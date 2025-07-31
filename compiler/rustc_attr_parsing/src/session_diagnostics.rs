@@ -705,3 +705,18 @@ impl<'a, G: EmissionGuarantee> Diagnostic<'a, G> for AttributeParseError {
         diag
     }
 }
+
+#[derive(Diagnostic)]
+#[diag(attr_parsing_generic_wrong_target)]
+#[help]
+pub(crate) struct GenericWrongTarget {
+    #[primary_span]
+    pub attr_span: Span,
+    #[label]
+    pub target_span: Span,
+
+    pub target: &'static str,
+
+    pub ok_targets: DiagArgValue,
+    pub num_ok_targets: usize,
+}
