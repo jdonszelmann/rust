@@ -31,7 +31,7 @@ use rustc_query_system::query::{
 };
 use rustc_query_system::{QueryOverflow, QueryOverflowNote};
 use rustc_serialize::{Decodable, Encodable};
-use rustc_session::Limit;
+use rustc_hir::limit::Limit;
 use rustc_span::def_id::LOCAL_CRATE;
 
 use crate::QueryConfigRestored;

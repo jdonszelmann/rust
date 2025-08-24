@@ -2,6 +2,7 @@
 
 use rustc_abi::ExternAbi;
 use rustc_errors::codes::*;
+use rustc_hir::limit::Limit;
 use rustc_errors::{
     Applicability, Diag, DiagCtxtHandle, DiagSymbolList, Diagnostic, EmissionGuarantee, Level,
     MultiSpan,
@@ -568,7 +569,7 @@ pub(crate) struct AutoDerefReachedRecursionLimit<'a> {
     #[label]
     pub span: Span,
     pub ty: Ty<'a>,
-    pub suggested_limit: rustc_session::Limit,
+    pub suggested_limit: Limit,
     pub crate_name: Symbol,
 }
 

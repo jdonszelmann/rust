@@ -231,7 +231,7 @@ use rustc_middle::ty::{
 };
 use rustc_middle::util::Providers;
 use rustc_middle::{bug, span_bug};
-use rustc_session::Limit;
+use rustc_hir::limit::Limit;
 use rustc_session::config::{DebugInfo, EntryFnType};
 use rustc_span::source_map::{Spanned, dummy_spanned, respan};
 use rustc_span::{DUMMY_SP, Span};

@@ -12,7 +12,7 @@ use rustc_middle::ty::layout::{
 };
 use rustc_middle::ty::{self, GenericArgsRef, Ty, TyCtxt, TypeFoldable, TypingEnv, Variance};
 use rustc_middle::{mir, span_bug};
-use rustc_session::Limit;
+use rustc_hir::limit::Limit;
 use rustc_span::Span;
 use rustc_target::callconv::FnAbi;
 use tracing::{debug, trace};
