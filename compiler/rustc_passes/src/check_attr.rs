@@ -252,6 +252,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                     | AttributeKind::Linkage(..)
                     | AttributeKind::MustUse { .. }
                     | AttributeKind::CrateName { .. }
+                    | AttributeKind::RecursionLimit { .. }
                 ) => { /* do nothing  */ }
                 Attribute::Unparsed(attr_item) => {
                     style = Some(attr_item.style);

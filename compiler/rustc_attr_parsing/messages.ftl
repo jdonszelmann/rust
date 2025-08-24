@@ -189,3 +189,7 @@ attr_parsing_invalid_meta_item = expected a literal (`1u8`, `1.0f32`, `"string"`
 
 attr_parsing_suffixed_literal_in_attribute = suffixed literals are not allowed in attributes
     .help = instead of using a suffixed literal (`1u8`, `1.0f32`, etc.), use an unsuffixed version (`1`, `1.0`, etc.)
+
+attr_parsing_limit_invalid =
+    `limit` must be a non-negative integer
+    .label = {$error_str}
