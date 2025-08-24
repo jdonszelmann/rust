@@ -482,6 +482,9 @@ pub enum AttributeKind {
     /// Represents `#[path]`
     Path(Symbol, Span),
 
+    /// Represents `#[pattern_complexity_limit]`
+    PatternComplexityLimit { attr_span: Span, limit_span: Span, limit: usize },
+
     /// Represents `#[pointee]`
     Pointee(Span),
 

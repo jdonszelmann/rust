@@ -25,7 +25,8 @@ use crate::attributes::codegen_attrs::{
 };
 use crate::attributes::confusables::ConfusablesParser;
 use crate::attributes::crate_level::{
-    CrateNameParser, MoveSizeLimitParser, RecursionLimitParser, TypeLengthLimitParser,
+    CrateNameParser, MoveSizeLimitParser, PatternComplexityLimitParser, RecursionLimitParser,
+    TypeLengthLimitParser,
 };
 use crate::attributes::deprecation::DeprecationParser;
 use crate::attributes::dummy::DummyParser;
@@ -184,6 +185,7 @@ attribute_parsers!(
         Single<MustUseParser>,
         Single<OptimizeParser>,
         Single<PathAttributeParser>,
+        Single<PatternComplexityLimitParser>,
         Single<ProcMacroDeriveParser>,
         Single<RecursionLimitParser>,
         Single<RustcBuiltinMacroParser>,
