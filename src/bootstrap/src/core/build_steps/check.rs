@@ -16,7 +16,7 @@ use crate::core::builder::{
 };
 use crate::core::config::TargetSelection;
 use crate::utils::build_stamp::{self, BuildStamp};
-use crate::{CodegenBackendKind, Compiler, Mode, Subcommand, t};
+use crate::{CodegenBackendKind, Compiler, InstrumentCoverage, Mode, Subcommand, t};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Std {
@@ -341,7 +341,14 @@ impl Step for Rustc {
             Kind::Check,
         );
 
-        rustc_cargo(builder, &mut cargo, target, &build_compiler, &self.crates);
+        rustc_cargo(
+            builder,
+            &mut cargo,
+            target,
+            InstrumentCoverage::Disabled,
+            &build_compiler,
+            &self.crates,
+        );
         self.build_compiler.configure_cargo(&mut cargo);
 
         // Explicitly pass -p for all compiler crates -- this will force cargo
@@ -359,8 +366,13 @@ impl Step for Rustc {
             target,
         );
 
-        let stamp =
-            build_stamp::librustc_stamp(builder, build_compiler, target).with_prefix("check");
+        let stamp = build_stamp::librustc_stamp(
+            builder,
+            build_compiler,
+            target,
+            InstrumentCoverage::Disabled,
+        )
+        .with_prefix("check");
 
         run_cargo(builder, cargo, builder.config.free_args.clone(), &stamp, vec![], true, false);
 

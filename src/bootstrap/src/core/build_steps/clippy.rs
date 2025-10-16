@@ -23,7 +23,7 @@ use crate::core::build_steps::compile::std_crates_for_run_make;
 use crate::core::builder;
 use crate::core::builder::{Alias, Kind, RunConfig, Step, StepMetadata, crate_description};
 use crate::utils::build_stamp::{self, BuildStamp};
-use crate::{Compiler, Mode, Subcommand, TargetSelection};
+use crate::{Compiler, InstrumentCoverage, Mode, Subcommand, TargetSelection};
 
 /// Disable the most spammy clippy lints
 const IGNORED_RULES_FOR_STD_AND_RUSTC: &[&str] = &[
@@ -279,7 +279,14 @@ impl Step for Rustc {
             Kind::Clippy,
         );
 
-        rustc_cargo(builder, &mut cargo, target, &build_compiler, &self.crates);
+        rustc_cargo(
+            builder,
+            &mut cargo,
+            target,
+            InstrumentCoverage::Disabled,
+            &build_compiler,
+            &self.crates,
+        );
         self.build_compiler.configure_cargo(&mut cargo);
 
         // Explicitly pass -p for all compiler crates -- this will force cargo
@@ -301,7 +308,12 @@ impl Step for Rustc {
             builder,
             cargo,
             lint_args(builder, &self.config, IGNORED_RULES_FOR_STD_AND_RUSTC),
-            &build_stamp::librustc_stamp(builder, build_compiler, target),
+            &build_stamp::librustc_stamp(
+                builder,
+                build_compiler,
+                target,
+                InstrumentCoverage::Disabled,
+            ),
             vec![],
             true,
             false,

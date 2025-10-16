@@ -45,7 +45,7 @@ use crate::core::config::toml::rust::{
     parse_codegen_backends,
 };
 use crate::core::config::toml::target::{
-    DefaultLinuxLinkerOverride, Target, TomlTarget, default_linux_linker_overrides,
+    DefaultLinuxLinkerOverride, Target, TomlTarget, default_linux_linker_overrides
 };
 use crate::core::config::{
     CompilerBuiltins, DebuginfoLevel, DryRun, GccCiMode, LlvmLibunwind, Merge, ReplaceOpt,

@@ -35,7 +35,10 @@ use crate::utils::helpers::{
     exe, is_dylib, move_file, t, target_supports_cranelift_backend, timeit,
 };
 use crate::utils::tarball::{GeneratedTarball, OverlayKind, Tarball};
-use crate::{CodegenBackendKind, Compiler, DependencyType, FileType, LLVM_TOOLS, Mode, trace};
+use crate::{
+    CodegenBackendKind, Compiler, DependencyType, FileType, InstrumentCoverage, LLVM_TOOLS, Mode,
+    trace,
+};
 
 pub fn pkgname(builder: &Builder<'_>, component: &str) -> String {
     format!("{}-{}", component, builder.rust_package_vers())
@@ -881,11 +884,16 @@ impl Step for RustcDev {
         }
 
         // Build the compiler that we will ship
-        builder.ensure(compile::Rustc::new(build_compiler, target));
+        builder.ensure(compile::Rustc::new(build_compiler, target, InstrumentCoverage::Disabled));
 
         let tarball = Tarball::new(builder, "rustc-dev", &target.triple);
 
-        let stamp = build_stamp::librustc_stamp(builder, build_compiler, target);
+        let stamp = build_stamp::librustc_stamp(
+            builder,
+            build_compiler,
+            target,
+            InstrumentCoverage::Disabled,
+        );
         copy_target_libs(builder, target, tarball.image_dir(), &stamp);
 
         let src_files = &["Cargo.lock"];
@@ -2362,7 +2370,11 @@ pub fn maybe_install_llvm_target(builder: &Builder<'_>, target: TargetSelection,
     ),
 )]
 pub fn maybe_install_llvm_runtime(builder: &Builder<'_>, target: TargetSelection, sysroot: &Path) {
-    let dst_libdir = sysroot.join(builder.sysroot_libdir_relative(Compiler::new(1, target)));
+    let dst_libdir = sysroot.join(builder.sysroot_libdir_relative(Compiler::new(
+        1,
+        target,
+        InstrumentCoverage::Disabled,
+    )));
     // We do not need to copy LLVM files into the sysroot if it is not
     // dynamically linked; it is already included into librustc_llvm
     // statically.

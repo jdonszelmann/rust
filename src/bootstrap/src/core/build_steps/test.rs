@@ -36,7 +36,9 @@ use crate::utils::helpers::{
     linker_args, linker_flags, t, target_supports_cranelift_backend, up_to_date,
 };
 use crate::utils::render_tests::{add_flags_and_try_run_tests, try_run_tests};
-use crate::{CLang, CodegenBackendKind, DocTests, GitRepo, Mode, PathSet, envify};
+use crate::{
+    CLang, CodegenBackendKind, DocTests, GitRepo, InstrumentCoverage, Mode, PathSet, envify,
+};
 
 const ADB_TEST_DIR: &str = "/data/local/tmp/work";
 
@@ -1785,8 +1787,22 @@ NOTE: if you're sure you want to do this, please open an issue as to why. In the
             (stage, format!("stage{stage}-{target}"))
         };
 
+        // if we're supposed to generate a coverage report,
+        // replace the test compiler with an equivalent one that has coverage enabled.
+        if builder.config.cmd.coverage_report() {
+            test_compiler = builder.compiler_with_instrument_coverage(
+                test_compiler.stage,
+                test_compiler.host,
+                InstrumentCoverage::Enabled,
+            );
+        }
+
         if suite.ends_with("fulldeps") {
-            builder.ensure(compile::Rustc::new(test_compiler, target));
+            builder.ensure(compile::Rustc::new(
+                test_compiler,
+                target,
+                InstrumentCoverage::Disabled,
+            ));
         }
 
         if suite == "debuginfo" {
@@ -1798,7 +1814,6 @@ NOTE: if you're sure you want to do this, please open an issue as to why. In the
         if mode == "run-make" {
             builder.tool_exe(Tool::RunMakeSupport);
         }
-
         // ensure that `libproc_macro` is available on the host.
         if suite == "mir-opt" {
             builder.ensure(
@@ -2341,6 +2356,10 @@ Please disable assertions with `rust.debug-assertions = false`.
 
         if builder.config.cmd.rustfix_coverage() {
             cmd.arg("--rustfix-coverage");
+        }
+
+        if builder.config.cmd.coverage_report() {
+            // cmd.arg("--coverage-report");
         }
 
         cmd.arg("--channel").arg(&builder.config.channel);
@@ -2992,7 +3011,14 @@ impl Step for Crate {
                 }
             }
             Mode::Rustc => {
-                compile::rustc_cargo(builder, &mut cargo, target, &build_compiler, &self.crates);
+                compile::rustc_cargo(
+                    builder,
+                    &mut cargo,
+                    target,
+                    InstrumentCoverage::Disabled,
+                    &build_compiler,
+                    &self.crates,
+                );
             }
             _ => panic!("can only test libraries"),
         };
@@ -3052,7 +3078,7 @@ impl Step for CrateRustdoc {
         // the target rustdoc (`ci-rustc-sysroot` vs `stage2`). In that case, we need to ensure this
         // explicitly to make sure it ends up in the stage2 sysroot.
         builder.std(compiler, target);
-        builder.ensure(compile::Rustc::new(compiler, target));
+        builder.ensure(compile::Rustc::new(compiler, target, InstrumentCoverage::Disabled));
 
         let mut cargo = tool::prepare_tool_cargo(
             builder,

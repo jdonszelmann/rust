@@ -107,18 +107,29 @@ pub struct Compiler {
     /// This field is ignored in `Hash` and `PartialEq` implementations as only the `stage`
     /// and `host` fields are relevant for those.
     forced_compiler: bool,
+
+    instrument_coverage: InstrumentCoverage,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash)]
+pub enum InstrumentCoverage {
+    Enabled,
+    Disabled,
 }
 
 impl std::hash::Hash for Compiler {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.stage.hash(state);
         self.host.hash(state);
+        self.instrument_coverage.hash(state);
     }
 }
 
 impl PartialEq for Compiler {
     fn eq(&self, other: &Self) -> bool {
-        self.stage == other.stage && self.host == other.host
+        self.stage == other.stage
+            && self.host == other.host
+            && self.instrument_coverage == other.instrument_coverage
     }
 }
 
@@ -1786,6 +1797,11 @@ impl Build {
     /// so do not write to dst.
     #[track_caller]
     pub fn copy_link(&self, src: &Path, dst: &Path, file_type: FileType) {
+        // if dst.display().to_string().contains("librustc_driver")
+        // && dst.display().to_string().contains("eb3")
+        // {
+        // panic!("from {src:?} to {dst:?}");
+        // }
         self.copy_link_internal(src, dst, false);
 
         if file_type.could_have_split_debuginfo()
@@ -2098,8 +2114,8 @@ fn chmod(path: &Path, perms: u32) {
 fn chmod(_path: &Path, _perms: u32) {}
 
 impl Compiler {
-    pub fn new(stage: u32, host: TargetSelection) -> Self {
-        Self { stage, host, forced_compiler: false }
+    pub fn new(stage: u32, host: TargetSelection, instrument_coverage: InstrumentCoverage) -> Self {
+        Self { stage, host, forced_compiler: false, instrument_coverage }
     }
 
     pub fn forced_compiler(&mut self, forced_compiler: bool) {
@@ -2114,6 +2130,11 @@ impl Compiler {
     /// Indicates whether the compiler was forced to use a specific stage.
     pub fn is_forced_compiler(&self) -> bool {
         self.forced_compiler
+    }
+
+    /// Indicates whether the compiler was built with -Cinstrument-coverage
+    pub fn instrument_coverage(&self) -> InstrumentCoverage {
+        self.instrument_coverage
     }
 }
 

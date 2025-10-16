@@ -10,7 +10,7 @@ use sha2::digest::Digest;
 use crate::core::builder::Builder;
 use crate::core::config::TargetSelection;
 use crate::utils::helpers::{hex_encode, mtime};
-use crate::{CodegenBackendKind, Compiler, Mode, helpers, t};
+use crate::{CodegenBackendKind, Compiler, InstrumentCoverage, Mode, helpers, t};
 
 #[cfg(test)]
 mod tests;
@@ -151,8 +151,15 @@ pub fn librustc_stamp(
     builder: &Builder<'_>,
     build_compiler: Compiler,
     target: TargetSelection,
+    instrument_coverage: InstrumentCoverage,
 ) -> BuildStamp {
-    BuildStamp::new(&builder.cargo_out(build_compiler, Mode::Rustc, target)).with_prefix("librustc")
+    if instrument_coverage == InstrumentCoverage::Enabled {
+        BuildStamp::new(&builder.cargo_out(build_compiler, Mode::Rustc, target))
+            .with_prefix("librustc-instrument-coverage")
+    } else {
+        BuildStamp::new(&builder.cargo_out(build_compiler, Mode::Rustc, target))
+            .with_prefix("librustc")
+    }
 }
 
 /// Computes a hash representing the state of a repository/submodule and additional input.

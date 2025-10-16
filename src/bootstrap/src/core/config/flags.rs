@@ -422,6 +422,10 @@ pub enum Subcommand {
         #[arg(long)]
         /// Use a different codegen backend when running tests.
         test_codegen_backend: Option<CodegenBackendKind>,
+        #[arg(long)]
+        /// Generate a coverage report for compiler tests.
+        /// Used mainly for CI to verify all code in the compiler is reached in tests.
+        coverage_report: bool,
     },
     /// Build and run some test suites *in Miri*
     Miri {
@@ -602,6 +606,13 @@ impl Subcommand {
     pub fn rustfix_coverage(&self) -> bool {
         match *self {
             Subcommand::Test { rustfix_coverage, .. } => rustfix_coverage,
+            _ => false,
+        }
+    }
+
+    pub fn coverage_report(&self) -> bool {
+        match *self {
+            Subcommand::Test { coverage_report, .. } => coverage_report,
             _ => false,
         }
     }

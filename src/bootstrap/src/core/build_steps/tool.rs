@@ -23,7 +23,7 @@ use crate::core::builder::{
 use crate::core::config::{DebuginfoLevel, RustcLto, TargetSelection};
 use crate::utils::exec::{BootstrapCommand, command};
 use crate::utils::helpers::{add_dylib_path, exe, t};
-use crate::{Compiler, FileType, Kind, Mode};
+use crate::{Compiler, FileType, Kind, Mode, InstrumentCoverage};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum SourceType {
@@ -86,7 +86,7 @@ impl Step for ToolBuild {
                 // FIXME: remove this, it's only needed for download-rustc...
                 if !self.build_compiler.is_forced_compiler() && builder.download_rustc() {
                     builder.std(self.build_compiler, self.build_compiler.host);
-                    builder.ensure(compile::Rustc::new(self.build_compiler, target));
+                    builder.ensure(compile::Rustc::new(self.build_compiler, target, InstrumentCoverage::Disabled));
                 }
             }
             Mode::ToolStd => {

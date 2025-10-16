@@ -37,8 +37,8 @@ use crate::utils::helpers::{
     exe, get_clang_cl_resource_dir, is_debug_info, is_dylib, symlink_dir, t, up_to_date,
 };
 use crate::{
-    CLang, CodegenBackendKind, Compiler, DependencyType, FileType, GitRepo, LLVM_TOOLS, Mode,
-    debug, trace,
+    CLang, CodegenBackendKind, Compiler, DependencyType, FileType, GitRepo, InstrumentCoverage,
+    LLVM_TOOLS, Mode, debug, trace,
 };
 
 /// Build a standard library for the given `target` using the given `build_compiler`.
@@ -165,6 +165,34 @@ impl Step for Std {
             builder.ensure(StdLink::from_std(self, compiler));
 
             return None;
+        }
+
+        // if we're creating an std for a compiler with instrument coverage,
+        // that always means we also already have std for the version of the compiler *without* coverage.
+        // So, we can just copy it out.
+        // This way we skip having to use the coverage-enabled compiler for compiling std,
+        // which is both slow and generates a lot of unneeded coverage data...
+        if self.build_compiler.instrument_coverage == InstrumentCoverage::Enabled {
+            let build_compiler = self.build_compiler;
+
+            let compiler_without_coverage = builder.compiler_with_instrument_coverage(
+                build_compiler.stage,
+                build_compiler.host,
+                InstrumentCoverage::Disabled,
+            );
+            builder.std(compiler_without_coverage, target);
+
+            builder.ensure(StartupObjects { compiler: build_compiler, target });
+            self.copy_extra_objects(builder, &build_compiler, target);
+
+            builder.ensure(StdLink::from_std(
+                self,
+                // This is the compiler that actually built std, which is a compiler *without coverage*.
+                // We're currently building std for an equivalent compiler *with coverage*, that can use the same rlibs.
+                compiler_without_coverage,
+            ));
+
+            return Some(build_stamp::libstd_stamp(builder, build_compiler, target));
         }
 
         let build_compiler = if builder.download_rustc() && self.force_recompile {
@@ -993,6 +1021,10 @@ pub struct BuiltRustc {
 pub struct Rustc {
     /// The target on which rustc will run (its host).
     pub target: TargetSelection,
+
+    /// Whether to build this compiler with -Cinstrument-coverage
+    pub instrument_coverage: InstrumentCoverage,
+
     /// The **previous** compiler used to compile this rustc.
     pub build_compiler: Compiler,
     /// Whether to build a subset of crates, rather than the whole compiler.
@@ -1004,8 +1036,12 @@ pub struct Rustc {
 }
 
 impl Rustc {
-    pub fn new(build_compiler: Compiler, target: TargetSelection) -> Self {
-        Self { target, build_compiler, crates: Default::default() }
+    pub fn new(
+        build_compiler: Compiler,
+        target: TargetSelection,
+        instrument_coverage: InstrumentCoverage,
+    ) -> Self {
+        Self { target, build_compiler, crates: Default::default(), instrument_coverage }
     }
 }
 
@@ -1041,6 +1077,7 @@ impl Step for Rustc {
                 .builder
                 .compiler(run.builder.top_stage.saturating_sub(1), run.build_triple()),
             target: run.target,
+            instrument_coverage: InstrumentCoverage::Disabled,
             crates,
         });
     }
@@ -1111,6 +1148,7 @@ impl Step for Rustc {
                 // We copy the rlibs into the sysroot of `build_compiler`
                 build_compiler,
                 target,
+                self.instrument_coverage,
                 self.crates,
             ));
 
@@ -1138,7 +1176,14 @@ impl Step for Rustc {
             Kind::Build,
         );
 
-        rustc_cargo(builder, &mut cargo, target, &build_compiler, &self.crates);
+        rustc_cargo(
+            builder,
+            &mut cargo,
+            target,
+            self.instrument_coverage,
+            &build_compiler,
+            &self.crates,
+        );
 
         // NB: all RUSTFLAGS should be added to `rustc_cargo()` so they will be
         // consistently applied by check/doc/test modes too.
@@ -1159,7 +1204,8 @@ impl Step for Rustc {
             build_compiler,
             target,
         );
-        let stamp = build_stamp::librustc_stamp(builder, build_compiler, target);
+        let stamp =
+            build_stamp::librustc_stamp(builder, build_compiler, target, self.instrument_coverage);
         run_cargo(
             builder,
             cargo,
@@ -1202,6 +1248,7 @@ pub fn rustc_cargo(
     builder: &Builder<'_>,
     cargo: &mut Cargo,
     target: TargetSelection,
+    instrument_coverage: InstrumentCoverage,
     build_compiler: &Compiler,
     crates: &[String],
 ) {
@@ -1273,6 +1320,10 @@ pub fn rustc_cargo(
         }
     } else if builder.config.rust_lto == RustcLto::Off {
         cargo.rustflag("-Clto=off");
+    }
+
+    if instrument_coverage == InstrumentCoverage::Enabled {
+        cargo.rustflag("-Cinstrument-coverage");
     }
 
     // With LLD, we can use ICF (identical code folding) to reduce the executable size
@@ -1521,6 +1572,8 @@ struct RustcLink {
     /// In most cases, it will correspond to `build_compiler`.
     sysroot_compiler: Compiler,
     target: TargetSelection,
+    instrument_coverage: InstrumentCoverage,
+
     /// Not actually used; only present to make sure the cache invalidation is correct.
     crates: Vec<String>,
 }
@@ -1534,6 +1587,7 @@ impl RustcLink {
             sysroot_compiler: rustc.build_compiler,
             target: rustc.target,
             crates: rustc.crates,
+            instrument_coverage: rustc.instrument_coverage,
         }
     }
 
@@ -1542,9 +1596,10 @@ impl RustcLink {
         build_compiler: Compiler,
         sysroot_compiler: Compiler,
         target: TargetSelection,
+        instrument_coverage: InstrumentCoverage,
         crates: Vec<String>,
     ) -> Self {
-        Self { build_compiler, sysroot_compiler, target, crates }
+        Self { build_compiler, sysroot_compiler, target, crates, instrument_coverage }
     }
 }
 
@@ -1564,7 +1619,7 @@ impl Step for RustcLink {
             builder,
             &builder.sysroot_target_libdir(sysroot_compiler, target),
             &builder.sysroot_target_libdir(sysroot_compiler, sysroot_compiler.host),
-            &build_stamp::librustc_stamp(builder, build_compiler, target),
+            &build_stamp::librustc_stamp(builder, build_compiler, target, self.instrument_coverage),
         );
     }
 }
@@ -1850,14 +1905,20 @@ impl Step for Sysroot {
         let host_dir = builder.out.join(compiler.host);
 
         let sysroot_dir = |stage| {
-            if stage == 0 {
-                host_dir.join("stage0-sysroot")
+            let name = if stage == 0 {
+                "stage0-sysroot".to_string()
             } else if self.force_recompile && stage == compiler.stage {
-                host_dir.join(format!("stage{stage}-test-sysroot"))
+                format!("stage{stage}-test-sysroot")
             } else if builder.download_rustc() && compiler.stage != builder.top_stage {
-                host_dir.join("ci-rustc-sysroot")
+                "ci-rustc-sysroot".to_string()
             } else {
-                host_dir.join(format!("stage{stage}"))
+                format!("stage{stage}")
+            };
+
+            if compiler.instrument_coverage == InstrumentCoverage::Enabled {
+                host_dir.join(format!("{name}-instrument-coverage"))
+            } else {
+                host_dir.join(name)
             }
         };
         let sysroot = sysroot_dir(compiler.stage);
@@ -2216,8 +2277,11 @@ impl Step for Assemble {
         );
 
         // It is possible that an uplift has happened, so we override build_compiler here.
-        let BuiltRustc { build_compiler } =
-            builder.ensure(Rustc::new(build_compiler, target_compiler.host));
+        let BuiltRustc { build_compiler } = builder.ensure(Rustc::new(
+            build_compiler,
+            target_compiler.host,
+            target_compiler.instrument_coverage,
+        ));
 
         let stage = target_compiler.stage;
         let host = target_compiler.host;
@@ -2236,7 +2300,12 @@ impl Step for Assemble {
         builder.info(&msg);
 
         // Link in all dylibs to the libdir
-        let stamp = build_stamp::librustc_stamp(builder, build_compiler, target_compiler.host);
+        let stamp = build_stamp::librustc_stamp(
+            builder,
+            build_compiler,
+            target_compiler.host,
+            target_compiler.instrument_coverage,
+        );
         let proc_macros = builder
             .read_stamp_file(&stamp)
             .into_iter()

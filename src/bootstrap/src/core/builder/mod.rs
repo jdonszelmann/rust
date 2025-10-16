@@ -26,7 +26,7 @@ use crate::utils::build_stamp::BuildStamp;
 use crate::utils::cache::Cache;
 use crate::utils::exec::{BootstrapCommand, ExecutionContext, command};
 use crate::utils::helpers::{self, LldThreads, add_dylib_path, exe, libdir, linker_args, t};
-use crate::{Build, Crate, trace};
+use crate::{Build, Crate, InstrumentCoverage, trace};
 
 mod cargo;
 
@@ -1362,6 +1362,10 @@ impl<'a> Builder<'a> {
     /// compiler will run on, *not* the target it will build code for). Explicitly does not take
     /// `Compiler` since all `Compiler` instances are meant to be obtained through this function,
     /// since it ensures that they are valid (i.e., built and assembled).
+    pub fn compiler(&self, stage: u32, host: TargetSelection) -> Compiler {
+        self.compiler_with_instrument_coverage(stage, host, InstrumentCoverage::Disabled)
+    }
+
     #[cfg_attr(
         feature = "tracing",
         instrument(
@@ -1372,11 +1376,19 @@ impl<'a> Builder<'a> {
             fields(
                 stage = stage,
                 host = ?host,
+                coverage = ?instrument_coverage,
             ),
         ),
     )]
-    pub fn compiler(&self, stage: u32, host: TargetSelection) -> Compiler {
-        self.ensure(compile::Assemble { target_compiler: Compiler::new(stage, host) })
+    pub fn compiler_with_instrument_coverage(
+        &self,
+        stage: u32,
+        host: TargetSelection,
+        instrument_coverage: InstrumentCoverage,
+    ) -> Compiler {
+        self.ensure(compile::Assemble {
+            target_compiler: Compiler::new(stage, host, instrument_coverage),
+        })
     }
 
     /// This function can be used to provide a build compiler for building

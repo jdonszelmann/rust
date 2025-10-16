@@ -20,7 +20,7 @@ use crate::core::builder::{
 };
 use crate::core::config::{Config, TargetSelection};
 use crate::helpers::{submodule_path_of, symlink_dir, t, up_to_date};
-use crate::{FileType, Mode};
+use crate::{FileType, InstrumentCoverage, Mode};
 
 macro_rules! book {
     ($($name:ident, $path:expr, $book_name:expr, $lang:expr ;)+) => {
@@ -919,7 +919,14 @@ impl Step for Rustc {
         // If there is any bug, please comment out the next line.
         cargo.rustdocflag("--generate-link-to-definition");
 
-        compile::rustc_cargo(builder, &mut cargo, target, &build_compiler, &self.crates);
+        compile::rustc_cargo(
+            builder,
+            &mut cargo,
+            target,
+            InstrumentCoverage::Disabled,
+            &build_compiler,
+            &self.crates,
+        );
         cargo.arg("-Zskip-rustdoc-fingerprint");
 
         // Only include compiler crates, no dependencies of those, such as `libc`.
