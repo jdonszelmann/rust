@@ -112,6 +112,7 @@ impl AttributeKind {
             RustcDelayedBugFromInsideQuery => No,
             RustcDenyExplicitImpl(..) => No,
             RustcDeprecatedSafe2024 { .. } => Yes,
+            RustcDoNotConstCheck => Yes,
             RustcDummy => No,
             RustcDumpDefParents => No,
             RustcDumpItemBounds => No,
