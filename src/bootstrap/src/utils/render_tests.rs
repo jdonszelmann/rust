@@ -109,7 +109,7 @@ impl<'a> Renderer<'a> {
     ) -> Self {
         let failed_tests = record_failed_tests.path().and_then(|path| {
             // create the file (overwriting any previous) to get ready to record new failed tests
-            match File::options().create(true).append(true).truncate(false).open(&path) {
+            match File::options().create(true).append(true).truncate(false).open(path) {
                 Ok(f) => Some(f),
                 Err(e) => {
                     println!(
@@ -299,6 +299,13 @@ impl<'a> Renderer<'a> {
             for failure in &self.failures {
                 println!("    {}", failure.name);
             }
+
+            if self.failed_tests.is_some() {
+                println!(
+                    "This list of test failures was recorded.\nUse `x test --rerun` to retry just these {} failed tests.",
+                    self.failures.len(),
+                )
+            }
         }
 
         if !self.benches.is_empty() {
@@ -391,12 +398,12 @@ impl<'a> Renderer<'a> {
             }
             Message::Test(TestMessage::Failed(outcome)) => {
                 self.render_test_outcome(Outcome::Failed, &outcome);
-                if let Some(failed_tests) = &mut self.failed_tests {
-                    if let Err(e) = writeln!(failed_tests, "{}", outcome.name) {
-                        eprintln!(
-                            "failed to write test failure to file: {e} (attempted because `--record` was passed)"
-                        );
-                    }
+                if let Some(failed_tests) = &mut self.failed_tests
+                    && let Err(e) = writeln!(failed_tests, "{}", outcome.name)
+                {
+                    eprintln!(
+                        "failed to write test failure to file: {e} (attempted because `--record` was passed)"
+                    );
                 }
                 self.failures.push(outcome);
             }
