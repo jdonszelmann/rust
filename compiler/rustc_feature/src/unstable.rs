@@ -652,14 +652,14 @@ declare_features! (
     (unstable, movdiri_target_feature, "CURRENT_RUSTC_VERSION", Some(163741)),
     /// Allows `move(expr)` in closures.
     (incomplete, move_expr, "1.97.0", Some(155050)),
+    /// The `Move` autotrait.
+    (incomplete, move_trait, "CURRENT_RUSTC_VERSION", Some(149607)),
     /// The `movrs` target feature on x86.
     (unstable, movrs_target_feature, "1.88.0", Some(137976)),
     /// Allows the `multiple_supertrait_upcastable` lint.
     (unstable, multiple_supertrait_upcastable, "1.69.0", Some(150833)),
     /// Allows the `#[must_not_suspend]` attribute.
     (unstable, must_not_suspend, "1.57.0", Some(83310)),
-    /// The `Move` autotrait.
-    (incomplete, move_trait, "CURRENT_RUSTC_VERSION", Some(149607)),
     /// Allows `mut ref` and `mut ref mut` identifier patterns.
     (incomplete, mut_ref, "1.79.0", Some(123076)),
     /// Allows `mut(crate) field: Type` restrictions.

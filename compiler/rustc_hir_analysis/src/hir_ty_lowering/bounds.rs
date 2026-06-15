@@ -108,7 +108,7 @@ fn collect_bounds<'a, 'tcx>(
 fn collect_sizedness_bounds<'tcx>(
     tcx: TyCtxt<'tcx>,
     hir_bounds: &[hir::GenericBound<'_>],
-    context: ImpliedBoundsContext<'tcx>,
+    context: ImpliedBoundsContext<'_>,
     span: Span,
 ) -> CollectedSizednessBounds {
     let sized_did = tcx.require_lang_item(LangItem::Sized, span);
@@ -143,15 +143,14 @@ pub(crate) enum IncludeSizedImplicitBound {
 }
 
 impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
-    /// Adds implicit sizedness, and in the future `Move` and `Forget`, and default trait bounds.
+    /// Adds implicit sizedness, `Move`, and default trait bounds.
     pub(crate) fn add_implicit_bounds(
         &self,
         bounds: &mut Vec<(ty::Clause<'tcx>, Span)>,
         self_ty: Ty<'tcx>,
         hir_bounds: &[hir::GenericBound<'_>],
-        context: ImpliedBoundsContext<'tcx>,
+        context: ImpliedBoundsContext<'_>,
         span: Span,
-        // Sized is treated slightly more specially than the other implicit bounds.
         include_sized: IncludeSizedImplicitBound,
     ) {
         // Skip adding any default bounds if `#![rustc_no_implicit_bounds]`
@@ -159,8 +158,8 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
             return;
         }
 
+        self.add_implicit_move_bound(bounds, self_ty, hir_bounds, context, span);
         self.add_default_traits(bounds, self_ty, hir_bounds, context, span);
-
         if let IncludeSizedImplicitBound::Yes = include_sized {
             self.add_implicit_sizedness_bounds(bounds, self_ty, hir_bounds, context, span);
         }
@@ -179,7 +178,7 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
         bounds: &mut Vec<(ty::Clause<'tcx>, Span)>,
         self_ty: Ty<'tcx>,
         hir_bounds: &[hir::GenericBound<'_>],
-        context: ImpliedBoundsContext<'tcx>,
+        context: ImpliedBoundsContext<'_>,
         span: Span,
     ) {
         let tcx = self.tcx();
@@ -231,12 +230,48 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
         }
     }
 
+    fn add_implicit_move_bound(
+        &self,
+        bounds: &mut Vec<(ty::Clause<'tcx>, Span)>,
+        self_ty: Ty<'tcx>,
+        hir_bounds: &[hir::GenericBound<'_>],
+        context: ImpliedBoundsContext<'_>,
+        span: Span,
+    ) {
+        let tcx = self.tcx();
+        match context {
+            ImpliedBoundsContext::TraitDef(trait_did) => {
+                // Don't add default move supertrait to default traits.
+                let did = trait_did.to_def_id();
+                if tcx.trait_is_auto(did)
+                    || tcx.is_sizedness_trait(did)
+                    || tcx.is_default_trait(did)
+                {
+                    return;
+                }
+            }
+            ImpliedBoundsContext::AssociatedTypeOrImplTrait | ImpliedBoundsContext::TyParam(..) => {
+            }
+        }
+
+        let Some(move_did) = tcx.lang_items().move_trait() else {
+            if tcx.features().move_trait() {
+                let _ = tcx.require_lang_item(LangItem::Move, span);
+            }
+            return;
+        };
+        let move_bounds = collect_bounds(hir_bounds, context, move_did);
+        if !move_bounds.any() {
+            add_trait_bound(tcx, bounds, self_ty, move_did, span);
+        }
+    }
+
     fn add_default_traits(
         &self,
         bounds: &mut Vec<(ty::Clause<'tcx>, Span)>,
         self_ty: Ty<'tcx>,
         hir_bounds: &[hir::GenericBound<'_>],
-        context: ImpliedBoundsContext<'tcx>,
+        context: ImpliedBoundsContext<'_>,
         span: Span,
     ) {
         self.tcx().default_traits().iter().for_each(|default_trait| {
@@ -253,7 +288,7 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
         bounds: &mut Vec<(ty::Clause<'tcx>, Span)>,
         self_ty: Ty<'tcx>,
         hir_bounds: &[hir::GenericBound<'_>],
-        context: ImpliedBoundsContext<'tcx>,
+        context: ImpliedBoundsContext<'_>,
         span: Span,
     ) {
         let tcx = self.tcx();
@@ -267,21 +302,10 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
         }
 
         if let Some(trait_did) = tcx.lang_items().get(trait_)
-            && self.should_add_default_traits(trait_did, hir_bounds, context)
+            && !collect_bounds(hir_bounds, context, trait_did).any()
         {
             add_trait_bound(tcx, bounds, self_ty, trait_did, span);
         }
-    }
-
-    /// Returns `true` if default trait bound should be added.
-    fn should_add_default_traits(
-        &self,
-        trait_def_id: DefId,
-        hir_bounds: &[hir::GenericBound<'_>],
-        context: ImpliedBoundsContext<'tcx>,
-    ) -> bool {
-        let collected = collect_bounds(hir_bounds, context, trait_def_id);
-        !find_attr!(self.tcx(), crate, RustcNoImplicitBounds) && !collected.any()
     }
 
     pub(crate) fn require_bound_to_relax_default_trait(
@@ -292,7 +316,8 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
         let tcx = self.tcx();
 
         if let Res::Def(DefKind::Trait, def_id) = trait_ref.path.res
-            && (tcx.is_lang_item(def_id, LangItem::Sized) || tcx.is_default_trait(def_id))
+            && (tcx.is_lang_item(def_id, LangItem::Sized) || tcx.is_implicit_trait(def_id, false))
+        // nia: todo: is metasized ok to include so we can simplify this?
         {
             return;
         }

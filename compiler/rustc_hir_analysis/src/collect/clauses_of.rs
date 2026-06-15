@@ -4,10 +4,12 @@ use hir::Node;
 use rustc_attr_ir::find_attr;
 use rustc_data_structures::fx::FxIndexSet;
 use rustc_hir as hir;
+use rustc_attr_ir::lang_items::LangItem;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_middle::ty::{
-    self, GenericClauses, ImplTraitInTraitData, Ty, TyCtxt, TypeVisitable, TypeVisitor, Upcast,
+    self, ClausePolarity, GenericClauses, ImplTraitInTraitData, Ty, TyCtxt, TypeVisitable,
+    TypeVisitor, Upcast,
 };
 use rustc_span::{DUMMY_SP, Ident, Span, bug, span_bug};
 use tracing::{debug, instrument, trace};
@@ -71,6 +73,15 @@ pub(super) fn clauses_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericClauses<'
                 .copied()
                 .chain(std::iter::once((ty::TraitRef::identity(tcx, def_id).upcast(tcx), span))),
         );
+    }
+
+    if !tcx.features().move_trait() {
+        result.clauses = tcx.arena.alloc_from_iter(result.clauses.iter().copied().filter(|p| {
+            !p.0.as_trait_clause().is_some_and(|p| {
+                p.polarity() == ClausePolarity::Positive
+                    && matches!(tcx.as_lang_item(p.def_id()), Some(LangItem::Move))
+            })
+        }));
     }
 
     debug!("clauses_of({:?}) = {:?}", def_id, result);
