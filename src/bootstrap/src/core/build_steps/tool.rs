@@ -550,6 +550,8 @@ pub struct RustcPerf {
     pub target: TargetSelection,
 }
 
+pub const DEFAULT_RUSTC_PERF_PATH: &str = "src/tools/rustc-perf";
+
 impl CommandLineStep for RustcPerf {
     /// Path to the built `collector` binary.
     type Output = ToolBuildResult;
@@ -567,14 +569,14 @@ impl CommandLineStep for RustcPerf {
 
     fn run(self, builder: &Builder<'_>) -> ToolBuildResult {
         // We need to ensure the rustc-perf submodule is initialized.
-        builder.require_submodule("src/tools/rustc-perf", None);
+        builder.require_submodule(DEFAULT_RUSTC_PERF_PATH, None);
 
         let tool = ToolBuild {
             build_compiler: self.compiler,
             target: self.target,
             tool: "collector",
             mode: Mode::ToolBootstrap,
-            path: "src/tools/rustc-perf",
+            path: DEFAULT_RUSTC_PERF_PATH,
             source_type: SourceType::Submodule,
             extra_features: Vec::new(),
             allow_features: "",
