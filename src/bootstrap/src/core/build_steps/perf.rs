@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
 use crate::core::build_steps::compile::Sysroot;
-use crate::core::build_steps::tool::{RustcPerf, Rustdoc};
+use crate::core::build_steps::tool::{DEFAULT_RUSTC_PERF_PATH, RustcPerf, Rustdoc};
 use crate::core::builder::Builder;
 use crate::core::config::DebuginfoLevel;
 use crate::utils::exec::{BootstrapCommand, command};
@@ -149,20 +149,30 @@ impl Display for Scenario {
 
 /// Performs profiling using `rustc-perf` on a built version of the compiler.
 pub fn perf(builder: &Builder<'_>, args: &PerfArgs, trailing_args: &[String]) {
-    let collector = builder.ensure(RustcPerf {
-        compiler: builder.compiler(0, builder.config.host_target),
-        target: builder.config.host_target,
-    });
+    let mut cmd = if builder.rustc_perf_path() == DEFAULT_RUSTC_PERF_PATH {
+        let collector = builder.ensure(RustcPerf {
+            compiler: builder.compiler(0, builder.config.host_target),
+            target: builder.config.host_target,
+        });
+
+        command(collector.tool_path)
+    } else {
+        builder.info(&format!("using custom rustc_perf at `{}`", builder.rustc_perf_path()));
+        let mut cmd = command("cargo");
+        cmd.arg("run");
+        cmd.arg("--release");
+        cmd.args(["--bin", "collector"]);
+        cmd.arg("--");
+        cmd
+    };
 
     let rustc_perf_dir = builder.sess.tempdir().join("rustc-perf");
     let results_dir = rustc_perf_dir.join("results");
     builder.create_dir(&results_dir);
 
-    let mut cmd = command(collector.tool_path);
-
     // We need to set the working directory to `src/tools/rustc-perf`, so that it can find the directory
     // with compile-time benchmarks.
-    cmd.current_dir(builder.src.join("src/tools/rustc-perf"));
+    cmd.current_dir(builder.src.join(builder.rustc_perf_path()));
 
     let db_path = args
         .cmd
